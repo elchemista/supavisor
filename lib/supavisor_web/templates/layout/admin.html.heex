@@ -1,0 +1,32 @@
+<main class="admin-shell">
+  <header class="admin-header">
+    <a class="admin-brand" href={~p"/admin"}>
+      <span class="admin-brand-mark">
+        <span class="hero-server-stack-mini"></span>
+      </span>
+      <span class="admin-brand-text">
+        <span class="admin-brand-name">Supavisor</span>
+        <span class="admin-brand-tag">Admin</span>
+      </span>
+    </a>
+    <nav class="admin-nav">
+      <a class="admin-nav-link is-active" href={~p"/admin"}>
+        <span class="hero-rectangle-stack-mini"></span>
+        Tenants
+      </a>
+    </nav>
+    <div class="admin-header-spacer"></div>
+    <form class="admin-signout" action={~p"/admin/logout"} method="post">
+      <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
+      <input type="hidden" name="_method" value="delete" />
+      <button type="submit" class="secondary-button secondary-button-sm" aria-label="Sign out">
+        <span class="hero-arrow-right-on-rectangle-mini"></span>
+        <span class="hide-sm">Sign out</span>
+      </button>
+    </form>
+  </header>
+
+  <section class="admin-content">
+    <%= @inner_content %>
+  </section>
+</main>

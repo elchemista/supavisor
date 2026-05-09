@@ -9,12 +9,23 @@ config :supavisor, Supavisor.Repo,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
 
+config :supavisor, SupavisorWeb.AdminProvisioning,
+  enabled: true,
+  provisioner: [
+    username: "postgres",
+    password: "postgres",
+    database: "postgres",
+    ssl: false,
+    ssl_opts: []
+  ],
+  allowed_targets: [{"localhost", 5432}, {"127.0.0.1", 5432}]
+
 # For development, we disable any cache and enable
 # debugging and code reloading.
 #
 # The watchers configuration can be used to run external
-# watchers to your application. For example, we use it
-# with esbuild to bundle .js and .css sources.
+# watchers to your application. For example, we use Tailwind
+# for CSS and esbuild for the LiveView client JS.
 config :supavisor, SupavisorWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
   # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
@@ -22,7 +33,10 @@ config :supavisor, SupavisorWeb.Endpoint,
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
-  watchers: []
+  watchers: [
+    tailwind: {Tailwind, :install_and_run, [:supavisor, ~w(--watch)]},
+    esbuild: {Esbuild, :install_and_run, [:supavisor, ~w(--sourcemap=inline --watch)]}
+  ]
 
 # ## SSL Support
 #
@@ -53,8 +67,8 @@ config :supavisor, SupavisorWeb.Endpoint,
   live_reload: [
     patterns: [
       ~r"priv/static/.*(js|css|png|jpeg|jpg|gif|svg)$",
-      ~r"lib/supavisor_web/(live|views)/.*(ex)$",
-      ~r"lib/supavisor_web/templates/.*(eex)$"
+      ~r"lib/supavisor_web/(live|views|components|controllers)/.*(ex)$",
+      ~r"lib/supavisor_web/templates/.*(eex|heex)$"
     ]
   ]
 

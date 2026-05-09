@@ -1,0 +1,1481 @@
+@import "tailwindcss" source(none);
+
+@source "../js";
+@source "../../lib/supavisor_web";
+
+@plugin "../vendor/heroicons";
+
+@plugin "../vendor/daisyui" {
+  themes: false;
+}
+
+/* ------------------------------------------------------------------
+   Monochrome themes (zinc/neutral). Accents live in base-content only.
+------------------------------------------------------------------ */
+
+@plugin "../vendor/daisyui-theme" {
+  name: "supavisor";
+  default: true;
+  prefersdark: false;
+  color-scheme: "light";
+  --color-base-100: oklch(100% 0 0);
+  --color-base-200: oklch(98% 0 0);
+  --color-base-300: oklch(91% 0 0);
+  --color-base-content: oklch(16% 0 0);
+  --color-primary: oklch(18% 0 0);
+  --color-primary-content: oklch(99% 0 0);
+  --color-secondary: oklch(30% 0 0);
+  --color-secondary-content: oklch(99% 0 0);
+  --color-accent: oklch(25% 0 0);
+  --color-accent-content: oklch(99% 0 0);
+  --color-neutral: oklch(20% 0 0);
+  --color-neutral-content: oklch(99% 0 0);
+  --color-info: oklch(55% 0 0);
+  --color-info-content: oklch(99% 0 0);
+  --color-success: oklch(45% 0 0);
+  --color-success-content: oklch(99% 0 0);
+  --color-warning: oklch(60% 0 0);
+  --color-warning-content: oklch(99% 0 0);
+  --color-error: oklch(35% 0 0);
+  --color-error-content: oklch(99% 0 0);
+  --radius-selector: 0.75rem;
+  --radius-field: 0.625rem;
+  --radius-box: 0.875rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@plugin "../vendor/daisyui-theme" {
+  name: "supavisor-dark";
+  default: false;
+  prefersdark: true;
+  color-scheme: "dark";
+  --color-base-100: oklch(15% 0 0);
+  --color-base-200: oklch(10% 0 0);
+  --color-base-300: oklch(25% 0 0);
+  --color-base-content: oklch(98% 0 0);
+  --color-primary: oklch(98% 0 0);
+  --color-primary-content: oklch(10% 0 0);
+  --color-secondary: oklch(70% 0 0);
+  --color-secondary-content: oklch(10% 0 0);
+  --color-accent: oklch(86% 0 0);
+  --color-accent-content: oklch(10% 0 0);
+  --color-neutral: oklch(28% 0 0);
+  --color-neutral-content: oklch(98% 0 0);
+  --color-info: oklch(75% 0 0);
+  --color-info-content: oklch(10% 0 0);
+  --color-success: oklch(78% 0 0);
+  --color-success-content: oklch(10% 0 0);
+  --color-warning: oklch(82% 0 0);
+  --color-warning-content: oklch(10% 0 0);
+  --color-error: oklch(62% 0 0);
+  --color-error-content: oklch(98% 0 0);
+  --radius-selector: 0.75rem;
+  --radius-field: 0.625rem;
+  --radius-box: 0.875rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
+@custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
+@custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
+
+[data-phx-session],
+[data-phx-teleported-src] {
+  display: contents;
+}
+
+/* ------------------------------------------------------------------
+   Design tokens
+------------------------------------------------------------------ */
+
+:root {
+  --shadow-soft: 0 1px 0 rgb(0 0 0 / 0.02), 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-md: 0 1px 0 rgb(0 0 0 / 0.02), 0 4px 14px rgb(0 0 0 / 0.06);
+  --shadow-lg: 0 10px 30px -12px rgb(0 0 0 / 0.25);
+  --ring: 0 0 0 3px color-mix(in oklch, var(--color-base-content), transparent 85%);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur: 180ms;
+  --surface-muted: color-mix(in oklch, var(--color-base-200), var(--color-base-100) 40%);
+}
+
+[data-theme="supavisor-dark"],
+html.dark {
+  --shadow-soft: 0 1px 0 rgb(0 0 0 / 0.4), 0 1px 2px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 1px 0 rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 18px 40px -14px rgb(0 0 0 / 0.6);
+  --ring: 0 0 0 3px color-mix(in oklch, var(--color-base-content), transparent 80%);
+}
+
+/* ------------------------------------------------------------------
+   Base
+------------------------------------------------------------------ */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--color-base-200);
+  background-image:
+    radial-gradient(1200px 700px at 50% -20%, color-mix(in oklch, var(--color-base-content), transparent 94%), transparent 60%),
+    radial-gradient(circle at 1px 1px, color-mix(in oklch, var(--color-base-content), transparent 92%) 1px, transparent 0);
+  background-size: 100% 100%, 24px 24px;
+  background-attachment: fixed;
+  color: var(--color-base-content);
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  letter-spacing: -0.005em;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: color-mix(in oklch, var(--color-base-content), transparent 75%);
+}
+
+/* subtle scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--color-base-content), transparent 80%) transparent;
+}
+
+/* ------------------------------------------------------------------
+   Shells
+------------------------------------------------------------------ */
+
+.admin-shell {
+  min-height: 100vh;
+  background: transparent;
+  color: var(--color-base-content);
+}
+
+.login-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 1.5rem;
+  background:
+    radial-gradient(800px 400px at 50% 0%, color-mix(in oklch, var(--color-base-100), transparent 40%), transparent 60%),
+    var(--color-base-200);
+  color: var(--color-base-content);
+}
+
+.login-panel {
+  width: 100%;
+  max-width: 26rem;
+  padding: 2rem;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+  background: var(--color-base-100);
+  box-shadow: var(--shadow-lg);
+  animation: pop-in 260ms var(--ease) both;
+}
+
+.login-panel h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.login-panel p {
+  margin: 0.5rem 0 1.5rem;
+  color: color-mix(in oklch, var(--color-base-content), transparent 40%);
+}
+
+.login-panel form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+/* ------------------------------------------------------------------
+   Buttons
+------------------------------------------------------------------ */
+
+.primary-button,
+.secondary-button,
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.95rem;
+  border-radius: var(--radius-field);
+  border: 1px solid transparent;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    transform var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    opacity var(--dur) var(--ease);
+  will-change: transform;
+}
+
+.primary-button:focus-visible,
+.secondary-button:focus-visible,
+.danger-button:focus-visible,
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.primary-button {
+  background: var(--color-primary);
+  color: var(--color-primary-content);
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-soft);
+}
+
+.primary-button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  background: color-mix(in oklch, var(--color-primary), var(--color-base-content) 8%);
+}
+
+.primary-button:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-soft);
+}
+
+.secondary-button {
+  background: var(--color-base-100);
+  color: var(--color-base-content);
+  border-color: var(--color-base-300);
+}
+
+.secondary-button:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 60%);
+  background: color-mix(in oklch, var(--color-base-100), var(--color-base-content) 4%);
+  box-shadow: var(--shadow-soft);
+}
+
+.danger-button {
+  background: transparent;
+  color: var(--color-error);
+  border-color: color-mix(in oklch, var(--color-error), transparent 55%);
+}
+
+.danger-button:hover {
+  background: color-mix(in oklch, var(--color-error), transparent 88%);
+  border-color: var(--color-error);
+  transform: translateY(-1px);
+}
+
+/* daisyUI btn overrides to stay monochrome */
+.btn {
+  border-radius: var(--radius-field);
+  transition:
+    transform var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+  font-weight: 600;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: color-mix(in oklch, var(--color-base-content), transparent 20%);
+}
+
+.btn-ghost:hover {
+  background: color-mix(in oklch, var(--color-base-content), transparent 92%);
+  color: var(--color-base-content);
+  border-color: transparent;
+}
+
+.btn-outline {
+  background: transparent;
+  border-color: var(--color-base-300);
+  color: var(--color-base-content);
+}
+
+.btn-outline:hover {
+  background: color-mix(in oklch, var(--color-base-content), transparent 92%);
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 60%);
+  color: var(--color-base-content);
+}
+
+.btn-error.btn-outline {
+  color: var(--color-error);
+  border-color: color-mix(in oklch, var(--color-error), transparent 55%);
+  background: transparent;
+}
+
+.btn-error.btn-outline:hover {
+  background: color-mix(in oklch, var(--color-error), transparent 88%);
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+/* ------------------------------------------------------------------
+   Header
+------------------------------------------------------------------ */
+
+.admin-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  min-height: 3.75rem;
+  gap: 0.9rem;
+  padding: 0.6rem clamp(1rem, 4vw, 2rem);
+  background: color-mix(in oklch, var(--color-base-100), transparent 20%);
+  backdrop-filter: saturate(140%) blur(10px);
+  -webkit-backdrop-filter: saturate(140%) blur(10px);
+  border-bottom: 1px solid color-mix(in oklch, var(--color-base-300), transparent 30%);
+}
+
+.admin-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--color-base-content);
+  text-decoration: none;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.admin-brand:hover {
+  opacity: 0.85;
+}
+
+.admin-brand-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 0.55rem;
+  background: var(--color-base-content);
+  color: var(--color-base-100);
+  box-shadow: var(--shadow-soft);
+}
+
+.admin-brand-text {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  line-height: 1;
+}
+
+.admin-brand-name {
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.admin-brand-tag {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: color-mix(in oklch, var(--color-base-content), transparent 55%);
+  border: 1px solid var(--color-base-300);
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+}
+
+.admin-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.5rem;
+}
+
+.admin-header-spacer {
+  flex: 1;
+}
+
+.admin-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: var(--radius-field);
+  color: color-mix(in oklch, var(--color-base-content), transparent 40%);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.admin-nav-link:hover {
+  background: color-mix(in oklch, var(--color-base-content), transparent 92%);
+  color: var(--color-base-content);
+}
+
+.admin-nav-link.is-active {
+  background: color-mix(in oklch, var(--color-base-content), transparent 88%);
+  color: var(--color-base-content);
+}
+
+.admin-signout {
+  margin: 0;
+}
+
+.secondary-button-sm {
+  min-height: 2.1rem;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.hide-sm {
+  display: inline;
+}
+
+@media (max-width: 640px) {
+  .hide-sm {
+    display: none;
+  }
+
+  .admin-brand-tag {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Content
+------------------------------------------------------------------ */
+
+.admin-content {
+  width: 100%;
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 1.75rem clamp(1rem, 4vw, 2rem) 4rem;
+  animation: fade-up 280ms var(--ease) both;
+}
+
+h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+h2 {
+  letter-spacing: -0.015em;
+}
+
+.page-title-row,
+.section-title-row,
+.form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.page-title-row {
+  padding-bottom: 1.25rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid color-mix(in oklch, var(--color-base-300), transparent 40%);
+}
+
+h1 {
+  font-size: 1.75rem;
+}
+
+.toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.page-subtitle,
+.form-section-heading p,
+.form-note {
+  margin: 0.25rem 0 0;
+  color: color-mix(in oklch, var(--color-base-content), transparent 45%);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.eyebrow {
+  margin: 0 0 0.3rem;
+  color: color-mix(in oklch, var(--color-base-content), transparent 55%);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------------
+   Panels
+------------------------------------------------------------------ */
+
+.table-panel,
+.form-section {
+  margin-bottom: 1rem;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+  background: var(--color-base-100);
+  box-shadow: var(--shadow-soft);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+
+.table-panel:hover,
+.form-section:hover {
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 80%);
+}
+
+.table-panel {
+  overflow: hidden;
+}
+
+.table-panel table,
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border-bottom: 1px solid color-mix(in oklch, var(--color-base-300), transparent 50%);
+  padding: 0.9rem 1.1rem;
+  text-align: left;
+  vertical-align: middle;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  background: color-mix(in oklch, var(--color-base-200), var(--color-base-100) 60%);
+  color: color-mix(in oklch, var(--color-base-content), transparent 55%);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--color-base-300);
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+tbody tr {
+  transition: background-color var(--dur) var(--ease);
+}
+
+tbody tr:hover {
+  background: color-mix(in oklch, var(--color-base-content), transparent 95%);
+}
+
+tbody tr:hover td {
+  border-bottom-color: color-mix(in oklch, var(--color-base-content), transparent 80%);
+}
+
+tbody tr td:first-child strong {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+td small {
+  display: block;
+  margin-top: 0.2rem;
+  color: color-mix(in oklch, var(--color-base-content), transparent 45%);
+}
+
+tr:last-child td {
+  border-bottom: 0;
+}
+
+.empty-cell {
+  padding: 3rem 1rem;
+  color: color-mix(in oklch, var(--color-base-content), transparent 50%);
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------
+   Forms
+------------------------------------------------------------------ */
+
+.form-section {
+  padding: 1.25rem;
+}
+
+.form-section-primary {
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 70%);
+}
+
+.tenant-form {
+  display: grid;
+  gap: 0.85rem;
+  max-width: 72rem;
+}
+
+.form-section-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+
+.form-section-heading h2 {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+
+.step-marker {
+  display: inline-grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: 0 0 1.75rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--color-base-content);
+  color: var(--color-base-100);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.form-grid-compact {
+  grid-template-columns: minmax(16rem, 28rem);
+}
+
+.form-grid-wide {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.field>span {
+  color: color-mix(in oklch, var(--color-base-content), transparent 30%);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+.field input:not([type="checkbox"]),
+.field select,
+.field textarea,
+.login-panel input:not([type="checkbox"]) {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-field);
+  background: var(--color-base-100);
+  color: var(--color-base-content);
+  transition:
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    background-color var(--dur) var(--ease);
+}
+
+.field input:not([type="checkbox"]):hover,
+.field select:hover,
+.field textarea:hover {
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 60%);
+}
+
+.field input:not([type="checkbox"]):focus,
+.field select:focus,
+.field textarea:focus,
+.login-panel input:focus {
+  outline: none;
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 40%);
+  box-shadow: var(--ring);
+}
+
+.field input[readonly],
+.login-panel input[readonly] {
+  background: color-mix(in oklch, var(--color-base-200), var(--color-base-100) 40%);
+  color: color-mix(in oklch, var(--color-base-content), transparent 25%);
+  cursor: default;
+}
+
+.field textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.field-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.5rem;
+}
+
+.field-checkbox input[type="checkbox"] {
+  accent-color: var(--color-base-content);
+  width: 1rem;
+  height: 1rem;
+}
+
+.field-error {
+  color: var(--color-error);
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+/* ------------------------------------------------------------------
+   Notices
+------------------------------------------------------------------ */
+
+.notice {
+  margin: 0 0 1rem;
+  border: 1px solid var(--color-base-300);
+  border-left: 3px solid var(--color-base-content);
+  border-radius: var(--radius-box);
+  background: color-mix(in oklch, var(--color-base-100), var(--color-base-200) 35%);
+  color: var(--color-base-content);
+  padding: 0.8rem 1rem;
+  animation: fade-up 220ms var(--ease) both;
+}
+
+.notice-error {
+  border-color: color-mix(in oklch, var(--color-error), transparent 60%);
+  border-left-color: var(--color-error);
+  background: color-mix(in oklch, var(--color-error), var(--color-base-100) 90%);
+  color: color-mix(in oklch, var(--color-error), var(--color-base-content) 40%);
+}
+
+.security-warning {
+  margin: 1rem 0 0;
+  border: 1px solid var(--color-base-300);
+  border-left: 3px solid var(--color-base-content);
+  border-radius: var(--radius-box);
+  background: color-mix(in oklch, var(--color-base-200), var(--color-base-100) 50%);
+  color: var(--color-base-content);
+  font-weight: 500;
+  line-height: 1.5;
+  padding: 0.8rem 0.95rem;
+}
+
+.provision-disabled code {
+  border-radius: 0.4rem;
+  background: var(--color-base-200);
+  padding: 0.08rem 0.32rem;
+}
+
+/* ------------------------------------------------------------------
+   Preview / recipe / code
+------------------------------------------------------------------ */
+
+.creation-preview {
+  margin-top: 1rem;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+  background: color-mix(in oklch, var(--color-base-200), var(--color-base-100) 50%);
+  padding: 0.95rem 1.05rem;
+}
+
+.creation-preview strong {
+  display: block;
+  margin-bottom: 0.45rem;
+}
+
+.creation-preview ul {
+  display: grid;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.creation-preview code {
+  border-radius: 0.4rem;
+  background: var(--color-base-100);
+  color: var(--color-base-content);
+  font-weight: 600;
+  padding: 0.08rem 0.36rem;
+}
+
+.connection-help-panel {
+  border-color: var(--color-base-300);
+  background: color-mix(in oklch, var(--color-base-100), var(--color-base-200) 25%);
+}
+
+.success-panel {
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 65%);
+}
+
+.connection-recipe {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.connection-recipe div {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+  background: var(--color-base-100);
+  padding: 0.8rem 0.9rem;
+  transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+
+.connection-recipe div:hover {
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 60%);
+  transform: translateY(-1px);
+}
+
+.connection-recipe span {
+  color: color-mix(in oklch, var(--color-base-content), transparent 50%);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.connection-recipe code,
+.field code,
+.form-section-heading code {
+  overflow-wrap: anywhere;
+  border-radius: 0.4rem;
+  background: color-mix(in oklch, var(--color-base-200), var(--color-base-100) 30%);
+  color: var(--color-base-content);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.88rem;
+  font-weight: 500;
+  padding: 0.1rem 0.38rem;
+  border: 1px solid color-mix(in oklch, var(--color-base-300), transparent 50%);
+}
+
+.code-example-panel {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.code-example-panel>span {
+  color: color-mix(in oklch, var(--color-base-content), transparent 35%);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.code-example-panel pre {
+  overflow-x: auto;
+  margin: 0;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+  background: color-mix(in oklch, var(--color-base-200), var(--color-base-100) 30%);
+  color: var(--color-base-content);
+  padding: 0.9rem 1rem;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.02);
+}
+
+.code-example-panel code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+.advanced-help {
+  margin: 0.75rem 0 0;
+  color: color-mix(in oklch, var(--color-base-content), transparent 45%);
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------
+   Auth mode cards / users
+------------------------------------------------------------------ */
+
+.auth-mode-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.auth-mode-card {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  min-height: 5rem;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+  background: var(--color-base-100);
+  cursor: pointer;
+  padding: 0.95rem;
+  transition:
+    border-color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+.auth-mode-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 55%);
+  box-shadow: var(--shadow-soft);
+}
+
+.auth-mode-card.is-selected {
+  border-color: var(--color-base-content);
+  background: color-mix(in oklch, var(--color-base-content), var(--color-base-100) 94%);
+  box-shadow: var(--shadow-soft);
+}
+
+.auth-mode-card input {
+  margin-top: 0.2rem;
+  accent-color: var(--color-base-content);
+}
+
+.auth-mode-card strong,
+.auth-mode-card small {
+  display: block;
+}
+
+.auth-mode-card strong {
+  font-weight: 700;
+}
+
+.auth-mode-card small {
+  margin-top: 0.25rem;
+  color: color-mix(in oklch, var(--color-base-content), transparent 45%);
+  line-height: 1.4;
+}
+
+.user-list {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.user-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(10rem, 1fr));
+  gap: 0.9rem;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+  background: color-mix(in oklch, var(--color-base-200), var(--color-base-100) 40%);
+  padding: 1rem;
+  transition: border-color var(--dur) var(--ease);
+}
+
+.user-row:hover {
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 65%);
+}
+
+.user-row-title {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--color-base-300);
+  padding-bottom: 0.75rem;
+}
+
+.user-row-title strong {
+  font-weight: 700;
+}
+
+.user-row-title span {
+  border: 1px solid var(--color-base-300);
+  border-radius: 999px;
+  color: color-mix(in oklch, var(--color-base-content), transparent 40%);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 0.15rem 0.55rem;
+  text-transform: uppercase;
+}
+
+.user-remove-button {
+  align-self: end;
+}
+
+.advanced-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 700;
+  transition: color var(--dur) var(--ease);
+}
+
+.advanced-summary:hover {
+  color: color-mix(in oklch, var(--color-base-content), transparent 20%);
+}
+
+.form-actions {
+  justify-content: flex-start;
+  gap: 0.6rem;
+  margin-top: 1.5rem;
+}
+
+/* ------------------------------------------------------------------
+   Stats grid (dashboard)
+------------------------------------------------------------------ */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.8rem;
+  margin-bottom: 1.25rem;
+}
+
+.stat-card {
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+  background: var(--color-base-100);
+  padding: 0.95rem 1.05rem;
+  box-shadow: var(--shadow-soft);
+  transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 60%);
+  box-shadow: var(--shadow-md);
+}
+
+.stat-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: color-mix(in oklch, var(--color-base-content), transparent 45%);
+}
+
+.stat-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 0.4rem;
+  background: color-mix(in oklch, var(--color-base-content), transparent 92%);
+  color: var(--color-base-content);
+}
+
+.stat-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.stat-value {
+  margin-top: 0.4rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-hint {
+  margin-top: 0.15rem;
+  color: color-mix(in oklch, var(--color-base-content), transparent 50%);
+  font-size: 0.8rem;
+}
+
+/* ------------------------------------------------------------------
+   Stepper
+------------------------------------------------------------------ */
+
+.stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  list-style: none;
+  margin: 0 0 1.25rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+  background: var(--color-base-100);
+  box-shadow: var(--shadow-soft);
+  counter-reset: step;
+}
+
+.stepper-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+  color: color-mix(in oklch, var(--color-base-content), transparent 55%);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.stepper-step+.stepper-step::before {
+  content: "";
+  position: absolute;
+  left: -0.6rem;
+  top: 50%;
+  width: 0.3rem;
+  height: 1px;
+  background: color-mix(in oklch, var(--color-base-content), transparent 75%);
+}
+
+.stepper-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-base-300);
+  background: var(--color-base-100);
+  color: color-mix(in oklch, var(--color-base-content), transparent 40%);
+  font-size: 0.72rem;
+  font-weight: 700;
+  transition: all var(--dur) var(--ease);
+}
+
+.stepper-step.is-active {
+  color: var(--color-base-content);
+}
+
+.stepper-step.is-active .stepper-dot {
+  background: var(--color-base-content);
+  border-color: var(--color-base-content);
+  color: var(--color-base-100);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-base-content), transparent 85%);
+}
+
+.stepper-step.is-done .stepper-dot {
+  background: color-mix(in oklch, var(--color-base-content), transparent 80%);
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 60%);
+  color: var(--color-base-content);
+}
+
+/* ------------------------------------------------------------------
+   Badge
+------------------------------------------------------------------ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.18rem 0.55rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
+  white-space: nowrap;
+  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+}
+
+.badge-neutral {
+  background: color-mix(in oklch, var(--color-base-content), transparent 92%);
+  color: var(--color-base-content);
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 85%);
+}
+
+.badge-outline {
+  background: transparent;
+  color: color-mix(in oklch, var(--color-base-content), transparent 15%);
+  border-color: var(--color-base-300);
+}
+
+.badge-outline:hover {
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 55%);
+}
+
+.badge-solid {
+  background: var(--color-base-content);
+  color: var(--color-base-100);
+  border-color: var(--color-base-content);
+}
+
+.badge-success {
+  background: color-mix(in oklch, var(--color-base-content), transparent 88%);
+  color: var(--color-base-content);
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 70%);
+}
+
+.badge-warning {
+  background: color-mix(in oklch, var(--color-warning), var(--color-base-100) 75%);
+  color: var(--color-base-content);
+  border-color: color-mix(in oklch, var(--color-warning), transparent 55%);
+}
+
+/* ------------------------------------------------------------------
+   Icon button
+------------------------------------------------------------------ */
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-field);
+  background: var(--color-base-100);
+  color: var(--color-base-content);
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    transform var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+.icon-button:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 55%);
+  background: color-mix(in oklch, var(--color-base-content), transparent 94%);
+  box-shadow: var(--shadow-soft);
+}
+
+.icon-button:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.icon-button-danger {
+  color: var(--color-error);
+  border-color: color-mix(in oklch, var(--color-error), transparent 60%);
+}
+
+.icon-button-danger:hover {
+  background: color-mix(in oklch, var(--color-error), transparent 88%);
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+/* ------------------------------------------------------------------
+   Empty state
+------------------------------------------------------------------ */
+
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 0.6rem;
+  padding: 3.5rem 1.5rem;
+  text-align: center;
+}
+
+.empty-state-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--color-base-content), transparent 92%);
+  color: color-mix(in oklch, var(--color-base-content), transparent 30%);
+}
+
+.empty-state-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.empty-state-description {
+  margin: 0;
+  max-width: 28rem;
+  color: color-mix(in oklch, var(--color-base-content), transparent 45%);
+  line-height: 1.5;
+}
+
+.empty-state-action {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+/* ------------------------------------------------------------------
+   Misc helpers
+------------------------------------------------------------------ */
+
+.heading-with-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.heading-with-badge h2 {
+  margin: 0;
+}
+
+td.num,
+th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+th.actions-col {
+  width: 1%;
+}
+
+td.mono {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.88rem;
+  color: color-mix(in oklch, var(--color-base-content), transparent 20%);
+}
+
+.step-marker-success {
+  background: color-mix(in oklch, var(--color-base-content), transparent 80%);
+  color: var(--color-base-content);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-base-content), transparent 90%);
+}
+
+.step-marker-warning {
+  background: var(--color-base-100);
+  color: var(--color-base-content);
+  border: 1px solid var(--color-base-content);
+}
+
+/* ------------------------------------------------------------------
+   Pill / actions
+------------------------------------------------------------------ */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-base-300);
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--color-base-200), var(--color-base-100) 50%);
+  color: color-mix(in oklch, var(--color-base-content), transparent 20%);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 0.18rem 0.55rem;
+  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.pill:hover {
+  border-color: color-mix(in oklch, var(--color-base-content), transparent 55%);
+  color: var(--color-base-content);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+/* ------------------------------------------------------------------
+   Heroicons alignment
+------------------------------------------------------------------ */
+
+[class^="hero-"],
+[class*=" hero-"] {
+  display: inline-block;
+  vertical-align: -0.125em;
+}
+
+/* ------------------------------------------------------------------
+   Animations
+------------------------------------------------------------------ */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* LiveView loading states */
+.phx-click-loading,
+.phx-submit-loading {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.phx-click-loading *,
+.phx-submit-loading * {
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Responsive
+------------------------------------------------------------------ */
+
+@media (max-width: 720px) {
+
+  .admin-header,
+  .page-title-row,
+  .section-title-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .toolbar-actions {
+    justify-content: flex-start;
+  }
+
+  .admin-nav {
+    margin-left: 0;
+  }
+
+  .form-section-heading {
+    flex-direction: column;
+  }
+
+  .user-row {
+    grid-template-columns: 1fr;
+  }
+}

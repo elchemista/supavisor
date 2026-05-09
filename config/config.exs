@@ -25,6 +25,42 @@ config :supavisor, SupavisorWeb.Endpoint,
   pubsub_server: Supavisor.PubSub,
   live_view: [signing_salt: "qf3AEZ7n"]
 
+config :supavisor, SupavisorWeb.AdminAuth,
+  admin_emails: ["admin@localhost"],
+  magic_link_ttl_seconds: 900,
+  session_ttl_seconds: 28_800,
+  email_from: {"Supavisor Admin", "admin@localhost"},
+  base_url: "http://localhost:4000"
+
+config :supavisor, SupavisorWeb.AdminProvisioning,
+  enabled: false,
+  provisioner: [],
+  allowed_targets: []
+
+config :supavisor, Supavisor.Mailer, adapter: Swoosh.Adapters.Local
+
+config :swoosh, :api_client, false
+
+config :esbuild,
+  version: "0.25.4",
+  supavisor: [
+    args:
+      ~w(js/app.js --bundle --target=es2017 --outdir=../priv/static/assets --external:/fonts/* --external:/images/*),
+    cd: Path.expand("../assets", __DIR__),
+    env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
+  ]
+
+config :tailwind,
+  version: "4.1.13",
+  supavisor: [
+    args: ~w(
+      --input=assets/css/app.css
+      --output=priv/static/assets/app.css
+    ),
+    cd: Path.expand("..", __DIR__),
+    env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
+  ]
+
 metadata = [
   :request_id,
   :project,

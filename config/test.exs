@@ -48,6 +48,25 @@ config :supavisor, SupavisorWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
   server: false
 
+config :supavisor, SupavisorWeb.AdminAuth,
+  admin_emails: ["admin@localhost", "admin@example.com"],
+  base_url: "http://localhost:4002",
+  magic_link_ttl_seconds: 900,
+  session_ttl_seconds: 28_800
+
+config :supavisor, SupavisorWeb.AdminProvisioning,
+  enabled: true,
+  provisioner: [
+    username: "postgres",
+    password: "postgres",
+    database: "postgres",
+    ssl: false,
+    ssl_opts: []
+  ],
+  allowed_targets: [{"localhost", 6432}, {"127.0.0.1", 6432}]
+
+config :supavisor, Supavisor.Mailer, adapter: Swoosh.Adapters.Test
+
 config :supavisor, Supavisor.Vault,
   ciphers: [
     default: {

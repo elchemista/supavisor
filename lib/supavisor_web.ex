@@ -23,6 +23,8 @@ defmodule SupavisorWeb do
 
       import Plug.Conn
       alias SupavisorWeb.Router.Helpers, as: Routes
+
+      unquote(verified_routes())
     end
   end
 
@@ -34,8 +36,47 @@ defmodule SupavisorWeb do
 
       # Import basic rendering functionality (render, render_layout, etc)
       import Phoenix.View
+      import Phoenix.Controller, only: [get_csrf_token: 0]
 
       import SupavisorWeb.ErrorHelpers
+
+      unquote(verified_routes())
+    end
+  end
+
+  def html do
+    quote do
+      use Phoenix.Component
+
+      import Phoenix.Controller,
+        only: [get_csrf_token: 0, view_module: 1, view_template: 1]
+
+      import Phoenix.HTML
+      alias SupavisorWeb.Router.Helpers, as: Routes
+
+      unquote(verified_routes())
+    end
+  end
+
+  def live_view do
+    quote do
+      use Phoenix.LiveView,
+        layout: {SupavisorWeb.LayoutView, :admin}
+
+      import SupavisorWeb.CoreComponents
+      alias SupavisorWeb.Router.Helpers, as: Routes
+
+      unquote(verified_routes())
+    end
+  end
+
+  def live_component do
+    quote do
+      use Phoenix.LiveComponent
+
+      import SupavisorWeb.CoreComponents
+
+      unquote(verified_routes())
     end
   end
 
@@ -54,6 +95,17 @@ defmodule SupavisorWeb do
       use Phoenix.Channel
     end
   end
+
+  defp verified_routes do
+    quote do
+      use Phoenix.VerifiedRoutes,
+        endpoint: SupavisorWeb.Endpoint,
+        router: SupavisorWeb.Router,
+        statics: SupavisorWeb.static_paths()
+    end
+  end
+
+  def static_paths, do: ~w(assets favicon.svg favicon-32x32.png robots.txt)
 
   @doc """
   When used, dispatch to the appropriate controller/view/etc.
