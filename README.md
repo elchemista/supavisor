@@ -5,6 +5,7 @@
 [![Coverage Status](https://coveralls.io/repos/github/supabase/supavisor/badge.svg?branch=main)](https://coveralls.io/github/supabase/supavisor?branch=main)
 
 - [Overview](#overview)
+- [Admin UI Branch](#admin-ui-branch)
 - [Motivation](#motivation)
 - [Architecture](#architecture)
 - [Docs](#docs)
@@ -19,6 +20,48 @@
 Supavisor is a scalable, cloud-native Postgres connection pooler. A Supavisor
 cluster is capable of proxying millions of Postgres end-client connections into
 a stateful pool of native Postgres database connections.
+
+## Admin UI Branch
+
+This branch adds a small Phoenix LiveView admin dashboard at `/admin` for people
+who run and manage their own PostgreSQL server with Supavisor in front of it.
+The goal is a simple internal UI for day-to-day connection management, not a
+full hosted control plane.
+
+![Supavisor admin dashboard](./screenshots/image.png)
+
+The dashboard supports:
+
+- Passwordless admin login with configured admin emails and magic links.
+- Listing Supavisor tenant connection profiles.
+- Creating, editing, and deleting tenant metadata.
+- Managing stored Supavisor users or auth-query manager users.
+- Showing concrete connection examples, including Elixir/Ecto `url:` config.
+- Optional database provisioning that creates a new PostgreSQL database and
+  login role, then creates the matching Supavisor tenant.
+
+Database provisioning is deliberately conservative. It is disabled by default in
+global config, requires explicit provisioner credentials, and only allows target
+hosts/ports listed in application config. It refuses to overwrite existing
+databases or roles. This is useful when Supavisor is deployed on a server you
+control and you want the admin dashboard to create both the PostgreSQL database
+and the Supavisor connection profile from one form.
+
+Supavisor clients still connect using the PostgreSQL protocol, not HTTP. The
+admin dashboard is HTTP, but applications connect to Supavisor with a PostgreSQL
+URL such as:
+
+```text
+postgresql://my_app_user.my_app:PASSWORD@supavisor-host:6553/my_app_db
+```
+
+For Ecto, the UI shows the equivalent tenant connection config:
+
+```elixir
+config :vext, MyApp.Repo,
+  url: "ecto://my_app_user.my_app:PASSWORD@supavisor-host:6553/my_app_db",
+  pool_size: 10
+```
 
 For database managers, Supavisor simplifies the task of managing Postgres
 clusters by providing easy configuration of highly available Postgres clusters
