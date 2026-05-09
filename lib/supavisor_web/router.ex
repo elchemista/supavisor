@@ -10,6 +10,14 @@ defmodule SupavisorWeb.Router do
     plug(:put_secure_browser_headers)
   end
 
+  pipeline :admin_fetch do
+    plug(SupavisorWeb.AdminAuth, :fetch_current_admin)
+  end
+
+  pipeline :require_admin do
+    plug(SupavisorWeb.AdminAuth, :require_authenticated_admin)
+  end
+
   pipeline :api do
     plug(:accepts, ["json"])
     plug(:check_auth, [:api_jwt_secret, :api_blocklist])
@@ -72,6 +80,26 @@ defmodule SupavisorWeb.Router do
     get("/:external_id", MetricsController, :tenant)
   end
 
+  scope "/admin", SupavisorWeb.Admin, as: :admin do
+    pipe_through([:browser, :admin_fetch])
+
+    get("/login", SessionController, :new)
+    post("/login", SessionController, :create)
+    get("/magic/:token", SessionController, :verify)
+    delete("/logout", SessionController, :delete)
+  end
+
+  scope "/admin", SupavisorWeb.Admin, as: :admin do
+    pipe_through([:browser, :admin_fetch, :require_admin])
+
+    live_session :admin, on_mount: [SupavisorWeb.AdminAuth] do
+      live("/", DashboardLive, :index)
+      live("/provision", ProvisionLive, :new)
+      live("/tenants/new", TenantLive, :new)
+      live("/tenants/:external_id/edit", TenantLive, :edit)
+    end
+  end
+
   # Other scopes may use custom stacks.
   # scope "/api", SupavisorWeb do
   #   pipe_through :api
@@ -91,6 +119,10 @@ defmodule SupavisorWeb.Router do
       pipe_through(:browser)
 
       live_dashboard("/dashboard", metrics: SupavisorWeb.Telemetry)
+
+      if Mix.env() == :dev do
+        forward("/dev/mailbox", Plug.Swoosh.MailboxPreview)
+      end
     end
   end
 
