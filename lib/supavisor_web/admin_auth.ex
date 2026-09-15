@@ -14,13 +14,41 @@ defmodule SupavisorWeb.AdminAuth do
 
   def init(action), do: action
 
+  def authenticate_session(session) when is_map(session), do: current_admin_from_session(session)
+  def authenticate_session(_), do: :error
+
   def call(conn, :fetch_current_admin), do: fetch_current_admin(conn)
   def call(conn, :require_authenticated_admin), do: require_authenticated_admin(conn)
 
   def on_mount(:default, _params, session, socket) do
     case current_admin_from_session(session) do
       {:ok, email} ->
-        {:cont, Phoenix.Component.assign(socket, :current_admin_email, email)}
+        socket =
+          socket
+          |> Phoenix.Component.assign(:current_admin_email, email)
+          |> Phoenix.LiveView.attach_hook(:admin_session_check, :handle_event, fn _event,
+                                                                                  _params,
+                                                                                  socket ->
+            case current_admin_from_session(session) do
+              {:ok, _} -> {:cont, socket}
+              :error -> {:halt, Phoenix.LiveView.redirect(socket, to: "/admin/login")}
+            end
+          end)
+
+        socket =
+          Phoenix.LiveView.attach_hook(
+            socket,
+            :admin_navigation_check,
+            :handle_params,
+            fn _params, _uri, socket ->
+              case current_admin_from_session(session) do
+                {:ok, _} -> {:cont, socket}
+                :error -> {:halt, Phoenix.LiveView.redirect(socket, to: "/admin/login")}
+              end
+            end
+          )
+
+        {:cont, socket}
 
       :error ->
         socket =
@@ -65,6 +93,24 @@ defmodule SupavisorWeb.AdminAuth do
   end
 
   def deliver_magic_link(email) do
+    case create_magic_link(email) do
+      {:ok, url} ->
+        case AdminEmail.magic_link(normalize_email(email), url, magic_link_ttl_seconds())
+             |> Mailer.deliver() do
+          {:ok, _metadata} -> {:ok, :sent}
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, :not_allowed} ->
+        :ok
+
+      error ->
+        error
+    end
+  end
+
+  @doc "Create a one-time link for an allowed admin, also usable from a release RPC console."
+  def create_magic_link(email) do
     email = normalize_email(email)
 
     if admin_email?(email) do
@@ -72,17 +118,11 @@ defmodule SupavisorWeb.AdminAuth do
       ttl = magic_link_ttl_seconds()
       cache_key = magic_link_cache_key(nonce)
 
-      with {:ok, true} <- Cachex.put(Supavisor.Cache, cache_key, email, ttl: ttl * 1000),
-           token <- sign_magic_link_token(email, nonce),
-           url <- magic_link_url(token),
-           {:ok, _metadata} <- AdminEmail.magic_link(email, url, ttl) |> Mailer.deliver() do
-        {:ok, :sent}
-      else
-        {:error, reason} -> {:error, reason}
-        other -> {:error, other}
+      with {:ok, true} <- Cachex.put(Supavisor.Cache, cache_key, email, ttl: ttl * 1000) do
+        {:ok, magic_link_url(sign_magic_link_token(email, nonce))}
       end
     else
-      :ok
+      {:error, :not_allowed}
     end
   end
 
@@ -91,8 +131,8 @@ defmodule SupavisorWeb.AdminAuth do
            Phoenix.Token.verify(Endpoint, @magic_link_salt, token,
              max_age: magic_link_ttl_seconds()
            ),
-         {:ok, ^email} <- Cachex.get(Supavisor.Cache, magic_link_cache_key(nonce)),
-         {:ok, _deleted?} <- Cachex.del(Supavisor.Cache, magic_link_cache_key(nonce)) do
+         true <- admin_email?(email),
+         {:ok, ^email} <- Cachex.take(Supavisor.Cache, magic_link_cache_key(nonce)) do
       {:ok, email}
     else
       _ -> {:error, :invalid_or_expired}
@@ -104,12 +144,7 @@ defmodule SupavisorWeb.AdminAuth do
     email in admin_emails()
   end
 
-  def admin_emails do
-    __MODULE__
-    |> config()
-    |> Keyword.get(:admin_emails, [])
-    |> Enum.map(&normalize_email/1)
-  end
+  def admin_emails, do: SupavisorWeb.AdminSettings.admin_emails()
 
   def session_ttl_seconds do
     __MODULE__

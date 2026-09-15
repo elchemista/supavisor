@@ -1,0 +1,28 @@
+[Unit]
+Description=Supavisor PostgreSQL pooler and admin
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=supavisor
+Group=supavisor
+WorkingDirectory=/opt/supavisor/current
+EnvironmentFile=/etc/supavisor/supavisor.env
+ExecStartPre=/opt/supavisor/current/bin/migrate
+ExecStart=/opt/supavisor/current/bin/server
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=120
+TimeoutStopSec=60
+LimitNOFILE=100000
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+StateDirectory=supavisor
+Environment=ERL_CRASH_DUMP=/var/lib/supavisor/erl_crash.dump
+
+[Install]
+WantedBy=multi-user.target

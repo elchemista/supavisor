@@ -1,6 +1,8 @@
 defmodule SupavisorWeb.Admin.TenantLive do
   use SupavisorWeb, :live_view
 
+  alias SupavisorWeb.AdminConnection
+
   alias Supavisor.Tenants
   alias SupavisorWeb.AdminTenantForm
 
@@ -12,7 +14,11 @@ defmodule SupavisorWeb.Admin.TenantLive do
           assign(socket,
             page_title: "New tenant",
             tenant: nil,
-            params: AdminTenantForm.new_params(),
+            params:
+              Map.merge(
+                AdminTenantForm.new_params(),
+                Map.take(params, ["db_host", "db_port", "db_database"])
+              ),
             errors: %{}
           )
 
@@ -131,19 +137,29 @@ defmodule SupavisorWeb.Admin.TenantLive do
   defp client_username(params), do: "#{first_client_user(params)}.#{connection_name(params)}"
 
   defp sample_connection_uri(params) do
-    "postgresql://#{client_username(params)}:PASSWORD@localhost:#{transaction_port()}/#{upstream_database(params)}"
+    AdminConnection.uri(
+      "postgresql",
+      client_username(params),
+      "PASSWORD",
+      upstream_database(params),
+      transaction_port()
+    )
   end
 
   defp sample_ecto_url(params) do
-    "ecto://#{client_username(params)}:PASSWORD@localhost:#{transaction_port()}/#{upstream_database(params)}"
+    AdminConnection.uri(
+      "ecto",
+      client_username(params),
+      "PASSWORD",
+      upstream_database(params),
+      transaction_port()
+    )
   end
 
   defp ecto_config_example(params) do
     """
-    config :vext, MyApp.Repo,
+    config :my_app, MyApp.Repo,
       url: "#{sample_ecto_url(params)}",
-      stacktrace: true,
-      show_sensitive_data_on_connection_error: true,
       pool_size: 10
     """
   end
@@ -305,7 +321,7 @@ defmodule SupavisorWeb.Admin.TenantLive do
         <div class="connection-recipe">
           <div>
             <span>Supavisor host</span>
-            <code>localhost</code>
+            <code><%= AdminConnection.host() %></code>
           </div>
           <div>
             <span>Transaction pool port</span>
@@ -426,7 +442,7 @@ defmodule SupavisorWeb.Admin.TenantLive do
         </div>
       </section>
 
-      <details class="form-section">
+      <details class="form-section" open={map_size(@errors) > 0}>
         <summary class="advanced-summary">
           <span class="hero-adjustments-horizontal-mini"></span>
           Advanced pooling, TLS, and network settings
@@ -461,14 +477,15 @@ defmodule SupavisorWeb.Admin.TenantLive do
             name="tenant[enforce_ssl]"
             checked={@params["enforce_ssl"] == "true"}
           />
-          <.input label="Default pool size" type="number" name="tenant[default_pool_size]" value={@params["default_pool_size"]} />
-          <.input label="Default max clients" type="number" name="tenant[default_max_clients]" value={@params["default_max_clients"]} />
-          <.input label="Client idle timeout" type="number" name="tenant[client_idle_timeout]" value={@params["client_idle_timeout"]} />
+          <.input label="Default pool size" type="number" name="tenant[default_pool_size]" value={@params["default_pool_size"]} errors={error(@errors, "default_pool_size")} />
+          <.input label="Default max clients" type="number" name="tenant[default_max_clients]" value={@params["default_max_clients"]} errors={error(@errors, "default_max_clients")} />
+          <.input label="Client idle timeout" type="number" name="tenant[client_idle_timeout]" value={@params["client_idle_timeout"]} errors={error(@errors, "client_idle_timeout")} />
           <.input
             label="Heartbeat interval"
             type="number"
             name="tenant[client_heartbeat_interval]"
             value={@params["client_heartbeat_interval"]}
+            errors={error(@errors, "client_heartbeat_interval")}
           />
           <.input label="SNI hostname" name="tenant[sni_hostname]" value={@params["sni_hostname"]} />
           <.input
@@ -483,6 +500,7 @@ defmodule SupavisorWeb.Admin.TenantLive do
             label="Allowed client IP CIDRs"
             name="tenant[allow_list]"
             value={@params["allow_list"]}
+            errors={error(@errors, "allow_list")}
             rows="4"
           />
           <.input

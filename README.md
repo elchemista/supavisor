@@ -2,6 +2,21 @@
 
 # Supavisor - Postgres connection pooler
 
+## Avvio rapido del pannello locale
+
+Con PostgreSQL già avviato su questo PC:
+
+```bash
+mix setup
+mix phx.server
+```
+
+Apri [http://localhost:4000/admin](http://localhost:4000/admin) e premi
+**Accedi in locale**: `admin@localhost` è già compilato.
+PostgreSQL resta sulla porta `5432`; Supavisor usa `6543` (transazioni) e `5452` (sessioni).
+
+[Guida completa: avvio locale e servizio Linux senza Docker](docs/development/local-admin.md).
+
 [![Coverage Status](https://coveralls.io/repos/github/supabase/supavisor/badge.svg?branch=main)](https://coveralls.io/github/supabase/supavisor?branch=main)
 
 - [Overview](#overview)

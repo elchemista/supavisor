@@ -46,6 +46,7 @@ defmodule SupavisorWeb.AdminProvisioning do
     with :ok <- ensure_enabled(),
          :ok <- ensure_configured(),
          :ok <- ensure_allowed_target(attrs.host, attrs.port),
+         :ok <- ensure_stored_user(attrs),
          :ok <- ensure_tenant_missing(attrs.external_id),
          :ok <- validate_identifier(attrs.database_name),
          :ok <- validate_identifier(attrs.role_name) do
@@ -72,10 +73,35 @@ defmodule SupavisorWeb.AdminProvisioning do
   defp do_provision(attrs) do
     password = generate_password()
 
-    with {:ok, conn} <- connect(attrs),
-         result <- provision_objects(conn, attrs, password) do
-      stop_conn(conn)
-      result
+    changeset =
+      Supavisor.Tenants.Tenant.changeset(
+        %Supavisor.Tenants.Tenant{},
+        tenant_attrs(attrs, password)
+      )
+
+    if changeset.valid? do
+      with_connection(attrs.host, attrs.port, &provision_objects(&1, attrs, password))
+    else
+      {:error, {:tenant_changeset, changeset}}
+    end
+  end
+
+  defp ensure_stored_user(%{auth_mode: "stored_users"}), do: :ok
+  defp ensure_stored_user(_), do: {:error, :unsupported_auth_mode}
+
+  def with_connection(host, port, fun) do
+    with :ok <- ensure_configured(),
+         :ok <- ensure_allowed_target(host, port),
+         {:ok, conn} <- connect(%{host: host, port: port}) do
+      Process.unlink(conn)
+
+      try do
+        fun.(conn)
+      catch
+        :exit, _reason -> {:error, :connection_failed}
+      after
+        stop_conn(conn)
+      end
     end
   end
 
@@ -164,8 +190,19 @@ defmodule SupavisorWeb.AdminProvisioning do
       username: Keyword.fetch!(provisioner, :username),
       password: Keyword.fetch!(provisioner, :password),
       database: Keyword.get(provisioner, :database, "postgres"),
-      ssl: Keyword.get(provisioner, :ssl, false),
-      ssl_opts: Keyword.get(provisioner, :ssl_opts, []),
+      ssl:
+        if(Keyword.get(provisioner, :ssl, false),
+          do:
+            Keyword.merge(
+              [verify: :verify_peer, cacerts: :public_key.cacerts_get()],
+              Keyword.get(provisioner, :ssl_opts, [])
+            ),
+          else: false
+        ),
+      connect_timeout: 5_000,
+      timeout: 5_000,
+      queue_target: 100,
+      queue_interval: 1_000,
       parameters: [application_name: "supavisor_admin_provisioning"]
     )
   end
@@ -280,6 +317,8 @@ defmodule SupavisorWeb.AdminProvisioning do
 
   defp stop_conn(conn) do
     if Process.alive?(conn), do: GenServer.stop(conn)
+  catch
+    :exit, _ -> :ok
   end
 
   defp config do

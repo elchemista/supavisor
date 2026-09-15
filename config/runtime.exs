@@ -8,6 +8,25 @@ parse_integer_list = fn numbers when is_binary(numbers) ->
   |> Enum.map(&String.to_integer/1)
 end
 
+parse_boolean = fn name, default ->
+  case System.get_env(name) do
+    nil -> default
+    "true" -> true
+    "false" -> false
+    _ -> raise "#{name} must be true or false"
+  end
+end
+
+if config_env() == :prod do
+  for name <- ~w(DATABASE_URL VAULT_ENC_KEY) do
+    if System.get_env(name) in [nil, ""], do: raise("Environment variable #{name} is missing")
+  end
+end
+
+if key = System.get_env("VAULT_ENC_KEY") do
+  if byte_size(key) != 32, do: raise("VAULT_ENC_KEY must contain exactly 32 bytes")
+end
+
 db_socket_options =
   if System.get_env("SUPAVISOR_DB_IP_VERSION") == "ipv6",
     do: [:inet6],
@@ -25,7 +44,7 @@ secret_key_base =
   end
 
 config :supavisor, SupavisorWeb.Endpoint,
-  server: true,
+  server: config_env() != :test,
   http: [
     port: String.to_integer(System.get_env("PORT") || "4000"),
     compress: true,
@@ -44,6 +63,68 @@ config :supavisor, SupavisorWeb.Endpoint,
     ]
   ],
   secret_key_base: secret_key_base
+
+if bind_address = System.get_env("HTTP_BIND_ADDRESS") do
+  case :inet.parse_address(String.to_charlist(bind_address)) do
+    {:ok, address} -> config :supavisor, SupavisorWeb.Endpoint, http: [ip: address]
+    _ -> raise "HTTP_BIND_ADDRESS must be an IPv4 or IPv6 address"
+  end
+end
+
+if config_env() != :test do
+  base_url =
+    System.get_env("ADMIN_BASE_URL", "http://localhost:#{System.get_env("PORT", "4000")}")
+
+  uri = URI.parse(base_url)
+
+  unless uri.scheme in ["http", "https"] and is_binary(uri.host) and
+           uri.userinfo == nil and uri.query == nil and uri.fragment == nil and
+           uri.path in [nil, "", "/"] do
+    raise "ADMIN_BASE_URL must be an http(s) origin, for example https://db.example.com"
+  end
+
+  config :supavisor, SupavisorWeb.Endpoint,
+    url: [scheme: uri.scheme, host: uri.host, port: uri.port],
+    check_origin: [String.trim_trailing(base_url, "/")]
+
+  config :supavisor, SupavisorWeb.AdminAuth,
+    admin_emails:
+      System.get_env("ADMIN_EMAILS", if(config_env() == :dev, do: "admin@localhost", else: ""))
+      |> String.split(",", trim: true)
+      |> Enum.map(&String.trim/1),
+    base_url: base_url,
+    email_from: {"Supavisor Admin", System.get_env("ADMIN_EMAIL_FROM", "admin@localhost")}
+
+  config :supavisor, :public_pooler_host, System.get_env("POOLER_HOST", uri.host)
+
+  if System.get_env("ADMIN_PROVISIONING_ENABLED") != nil do
+    config :supavisor, SupavisorWeb.AdminProvisioning,
+      enabled: parse_boolean.("ADMIN_PROVISIONING_ENABLED", false)
+  end
+
+  if host = System.get_env("ADMIN_POSTGRES_HOST") do
+    config :supavisor, SupavisorWeb.AdminProvisioning,
+      allowed_targets: [{host, String.to_integer(System.get_env("ADMIN_POSTGRES_PORT", "5432"))}],
+      provisioner: [
+        username: System.fetch_env!("ADMIN_POSTGRES_USER"),
+        password: System.fetch_env!("ADMIN_POSTGRES_PASSWORD"),
+        database: System.get_env("ADMIN_POSTGRES_DATABASE", "postgres"),
+        ssl: parse_boolean.("ADMIN_POSTGRES_SSL", false)
+      ]
+  end
+
+  if relay = System.get_env("SMTP_HOST") do
+    config :supavisor, Supavisor.Mailer,
+      adapter: Swoosh.Adapters.SMTP,
+      relay: relay,
+      port: String.to_integer(System.get_env("SMTP_PORT", "587")),
+      username: System.get_env("SMTP_USERNAME", ""),
+      password: System.get_env("SMTP_PASSWORD", ""),
+      auth: if(System.get_env("SMTP_USERNAME") in [nil, ""], do: :never, else: :always),
+      ssl: parse_boolean.("SMTP_SSL", false),
+      tls: if(parse_boolean.("SMTP_SSL", false), do: :never, else: :always)
+  end
+end
 
 topologies = []
 
@@ -85,12 +166,12 @@ topologies =
   end
 
 topologies =
-  if System.get_env("CLUSTER_POSTGRES") && Application.spec(:supavisor, :vsn) do
+  if System.get_env("CLUSTER_POSTGRES") == "true" && Application.spec(:supavisor, :vsn) do
     %Version{major: maj, minor: min} =
       Application.spec(:supavisor, :vsn) |> List.to_string() |> Version.parse!()
 
     region =
-      Enum.find_value(~W[CLUSTER_ID LOCATION_ID REGION], &System.get_env/1)
+      (Enum.find_value(~W[CLUSTER_ID LOCATION_ID REGION], &System.get_env/1) || "local")
       |> String.replace("-", "_")
 
     postgres = [
@@ -192,14 +273,16 @@ if config_env() != :test do
       System.get_env("TRANSACTION_PROXY_PORTS", "12104,12105,12106,12107")
       |> parse_integer_list.(),
     availability_zone: System.get_env("AVAILABILITY_ZONE"),
-    region: System.get_env("REGION") || System.get_env("FLY_REGION"),
+    region: System.get_env("REGION") || System.get_env("FLY_REGION") || "local",
     fly_alloc_id: System.get_env("FLY_ALLOC_ID"),
     jwt_claim_validators: System.get_env("JWT_CLAIM_VALIDATORS", "{}") |> JSON.decode!(),
-    api_jwt_secret: System.get_env("API_JWT_SECRET"),
-    metrics_jwt_secret: System.get_env("METRICS_JWT_SECRET"),
+    api_jwt_secret: System.get_env("API_JWT_SECRET", if(config_env() == :dev, do: "dev")),
+    metrics_jwt_secret: System.get_env("METRICS_JWT_SECRET", if(config_env() == :dev, do: "dev")),
     proxy_port_transaction:
       System.get_env("PROXY_PORT_TRANSACTION", "6543") |> String.to_integer(),
-    proxy_port_session: System.get_env("PROXY_PORT_SESSION", "5432") |> String.to_integer(),
+    proxy_port_session:
+      System.get_env("PROXY_PORT_SESSION", if(config_env() == :dev, do: "5452", else: "5432"))
+      |> String.to_integer(),
     proxy_port: System.get_env("PROXY_PORT", "5412") |> String.to_integer(),
     prom_poll_rate: System.get_env("PROM_POLL_RATE", "15000") |> String.to_integer(),
     global_upstream_ca: upstream_ca,
@@ -225,7 +308,11 @@ if config_env() != :test do
   }
 
   config :supavisor, Supavisor.Repo,
-    url: System.get_env("DATABASE_URL", "ecto://postgres:postgres@localhost:6432/postgres"),
+    url:
+      System.get_env(
+        "DATABASE_URL",
+        if(config_env() == :dev, do: "ecto://postgres:postgres@localhost:5432/supavisor_dev")
+      ),
     pool_size: System.get_env("DB_POOL_SIZE", "25") |> String.to_integer(),
     ssl_opts: [
       verify: :verify_none
@@ -239,7 +326,12 @@ if config_env() != :test do
     ciphers: [
       default: {
         Cloak.Ciphers.AES.GCM,
-        tag: "AES.GCM.V1", key: System.get_env("VAULT_ENC_KEY")
+        tag: "AES.GCM.V1",
+        key:
+          System.get_env(
+            "VAULT_ENC_KEY",
+            if(config_env() == :dev, do: "aHD8DZRdk2emnkdktFZRh3E9RNg4aOY7")
+          )
       }
     ]
 end

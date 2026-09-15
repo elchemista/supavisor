@@ -89,6 +89,78 @@ defmodule SupavisorWeb.AdminProvisioningTest do
     assert errors["database_name"] == ["Database name must be a lowercase Postgres identifier"]
   end
 
+  test "form rejects missing and out-of-range numeric values before creating objects" do
+    for {field, value} <- [
+          {"target_port", ""},
+          {"target_port", "65536"},
+          {"default_pool_size", "0"},
+          {"client_idle_timeout", "-1"}
+        ] do
+      params = %{
+        "external_id" => "numeric_validation",
+        "database_name" => "numeric_db",
+        "role_name" => "numeric_role"
+      }
+
+      assert {:error, errors, _} = AdminProvisioningForm.to_attrs(Map.put(params, field, value))
+      assert Map.has_key?(errors, field)
+    end
+  end
+
+  test "provisioned database and role accept real pooler connections" do
+    id = "admin_provision_#{System.unique_integer([:positive])}"
+
+    attrs = %{
+      attrs()
+      | external_id: id,
+        database_name: id,
+        role_name: id,
+        port: 6432,
+        ip_version: "v4",
+        default_pool_size: 1
+    }
+
+    on_exit(fn ->
+      Supavisor.terminate_global(id)
+      Supavisor.Tenants.delete_tenant_by_external_id(id)
+
+      {:ok, conn} =
+        Postgrex.start_link(
+          hostname: "localhost",
+          port: 6432,
+          username: "postgres",
+          password: "postgres",
+          database: "postgres"
+        )
+
+      Postgrex.query!(conn, ~s|DROP DATABASE IF EXISTS "#{id}" WITH (FORCE)|, [])
+      Postgrex.query!(conn, ~s(DROP ROLE IF EXISTS "#{id}"), [])
+      GenServer.stop(conn)
+    end)
+
+    assert {:ok, result} = AdminProvisioning.provision(attrs)
+    assert {:error, :tenant_exists} = AdminProvisioning.provision(attrs)
+
+    for port <- [
+          Application.fetch_env!(:supavisor, :proxy_port_transaction),
+          Application.fetch_env!(:supavisor, :proxy_port_session)
+        ] do
+      {:ok, conn} =
+        Postgrex.start_link(
+          hostname: "127.0.0.1",
+          port: port,
+          username: "#{id}.#{id}",
+          password: result.generated_password,
+          database: id
+        )
+
+      assert %{rows: [[^id, ^id]]} =
+               Postgrex.query!(conn, "SELECT current_database(), current_user", [])
+
+      GenServer.stop(conn)
+    end
+  end
+
   defp attrs do
     %{
       external_id: "tenant_a",

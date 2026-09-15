@@ -32,6 +32,11 @@ defmodule SupavisorWeb.Router do
     plug(OpenApiSpex.Plug.PutApiSpec, module: SupavisorWeb.ApiSpec)
   end
 
+  scope "/", SupavisorWeb.Admin do
+    pipe_through(:browser)
+    get("/", SessionController, :index)
+  end
+
   scope "/swaggerui" do
     pipe_through(:browser)
     get("/", OpenApiSpex.Plug.SwaggerUI, path: "/api/openapi")
@@ -85,6 +90,8 @@ defmodule SupavisorWeb.Router do
 
     get("/login", SessionController, :new)
     post("/login", SessionController, :create)
+    post("/auth/github", GithubController, :start)
+    get("/auth/github/callback", GithubController, :callback)
     get("/magic/:token", SessionController, :verify)
     delete("/logout", SessionController, :delete)
   end
@@ -92,8 +99,18 @@ defmodule SupavisorWeb.Router do
   scope "/admin", SupavisorWeb.Admin, as: :admin do
     pipe_through([:browser, :admin_fetch, :require_admin])
 
-    live_session :admin, on_mount: [SupavisorWeb.AdminAuth] do
+    live_session :admin, on_mount: [SupavisorWeb.AdminAuth, SupavisorWeb.AdminNavigation] do
       live("/", DashboardLive, :index)
+      live("/postgres", PostgresLive, :index)
+      live("/api", ApiLive, :index)
+      live("/authorization", AuthorizationLive, :index)
+      live("/metrics", MetricsLive, :index)
+      live("/mailer", ServicesLive, :mailer)
+      live("/embedding", ServicesLive, :embedding)
+      live("/stt", ServicesLive, :stt)
+      live("/tts", ServicesLive, :tts)
+      live("/ai-model", ServicesLive, :ai_model)
+      live("/importazioni", ServicesLive, :imports)
       live("/provision", ProvisionLive, :new)
       live("/tenants/new", TenantLive, :new)
       live("/tenants/:external_id/edit", TenantLive, :edit)

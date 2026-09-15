@@ -72,6 +72,31 @@ defmodule SupavisorWeb.AdminAuthTest do
     assert {:error, :invalid_or_expired} = AdminAuth.verify_magic_link(token)
   end
 
+  test "concurrent requests can consume a link only once" do
+    {:ok, url} = AdminAuth.create_magic_link("admin@example.com")
+    token = url |> String.split("/admin/magic/") |> List.last() |> URI.decode_www_form()
+
+    results =
+      1..12
+      |> Task.async_stream(fn _ -> AdminAuth.verify_magic_link(token) end)
+      |> Enum.map(fn {:ok, result} -> result end)
+
+    assert Enum.count(results, &match?({:ok, _}, &1)) == 1
+  end
+
+  test "a removed administrator cannot use a previously issued link" do
+    {:ok, url} = AdminAuth.create_magic_link("admin@example.com")
+    token = url |> String.split("/admin/magic/") |> List.last() |> URI.decode_www_form()
+
+    Application.put_env(
+      :supavisor,
+      AdminAuth,
+      Keyword.put(Application.fetch_env!(:supavisor, AdminAuth), :admin_emails, [])
+    )
+
+    assert {:error, :invalid_or_expired} = AdminAuth.verify_magic_link(token)
+  end
+
   test "admin session expires after configured ttl" do
     Application.put_env(:supavisor, AdminAuth,
       admin_emails: ["admin@example.com"],

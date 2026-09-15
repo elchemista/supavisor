@@ -1,32 +1,67 @@
-<main class="admin-shell">
-  <header class="admin-header">
-    <a class="admin-brand" href={~p"/admin"}>
-      <span class="admin-brand-mark">
-        <span class="hero-server-stack-mini"></span>
-      </span>
-      <span class="admin-brand-text">
-        <span class="admin-brand-name">Supavisor</span>
-        <span class="admin-brand-tag">Admin</span>
-      </span>
-    </a>
-    <nav class="admin-nav">
-      <a class="admin-nav-link is-active" href={~p"/admin"}>
-        <span class="hero-rectangle-stack-mini"></span>
-        Tenants
-      </a>
+<div id="admin-workspace" class="workspace-shell" phx-hook="Workspace" data-section={@navigation.id}>
+  <a href="#workspace-content" class="skip-link">Skip to content</a>
+  <div class="ambient-background" aria-hidden="true"><div class="ambient-orb"></div><div class="ambient-grid"></div></div>
+  <button class="sidebar-scrim" aria-label="Close navigation" tabindex="-1" data-close-sidebar></button>
+  <aside id="workspace-sidebar" class="workspace-sidebar" aria-label="Main navigation">
+    <button type="button" class="quiet-button sidebar-close" data-close-sidebar aria-label="Close menu"><span class="hero-x-mark"></span></button>
+    <.link navigate={~p"/admin"} class="workspace-brand" aria-label="Supavisor home">
+      <span class="brand-symbol"><span></span><span></span><span></span></span>
+      <span>supavisor<span class="brand-period">.</span></span>
+      <span class="brand-edition">CONSOLE</span>
+    </.link>
+    <div class="workspace-switcher">
+      <span class="workspace-avatar"><span class="hero-server-stack"></span></span>
+      <div><strong>My workspace</strong><span><i class="status-dot"></i><%= if Application.get_env(:supavisor, :env) == :dev, do: "Local environment", else: "Self hosted" %></span></div>
+      <span class="workspace-version">v<%= Application.get_env(:supavisor, :version) %></span>
+    </div>
+    <nav class="sidebar-navigation">
+      <div :for={{group, items} <- SupavisorWeb.AdminNavigation.groups()} class="nav-group">
+        <p class="nav-group-label"><%= group %></p>
+        <.link :for={item <- items} navigate={item.path}
+          class={["sidebar-link", @navigation.id == item.id && "is-active"]}
+          aria-current={if @navigation.id == item.id, do: "page"}>
+          <span class={item.icon} aria-hidden="true"></span>
+          <span><%= item.label %></span>
+          <span :if={item.id == :api} class="nav-tag">WS</span>
+          <span :if={@navigation.id == item.id} class="nav-active-dot"></span>
+        </.link>
+      </div>
     </nav>
-    <div class="admin-header-spacer"></div>
-    <form class="admin-signout" action={~p"/admin/logout"} method="post">
-      <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
-      <input type="hidden" name="_method" value="delete" />
-      <button type="submit" class="secondary-button secondary-button-sm" aria-label="Sign out">
-        <span class="hero-arrow-right-on-rectangle-mini"></span>
-        <span class="hide-sm">Sign out</span>
-      </button>
-    </form>
-  </header>
-
-  <section class="admin-content">
-    <%= @inner_content %>
-  </section>
-</main>
+    <div class="sidebar-bottom">
+      <div class="workspace-note"><span class="hero-command-line"></span><div><strong>Your stack. Your control.</strong><span>Postgres and services, all in one place.</span></div></div>
+      <div class="sidebar-profile">
+        <span class="profile-avatar"><%= String.first(@current_admin_email) |> String.upcase() %></span>
+        <div><strong>Administrator</strong><span><%= @current_admin_email %></span></div>
+        <form action={~p"/admin/logout"} method="post">
+          <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
+          <input type="hidden" name="_method" value="delete" />
+          <button type="submit" class="quiet-button" aria-label="Sign out" title="Sign out"><span class="hero-arrow-right-on-rectangle"></span></button>
+        </form>
+      </div>
+    </div>
+  </aside>
+  <div class="workspace-main">
+    <header class="workspace-topbar">
+      <button class="quiet-button mobile-menu-button" type="button" data-open-sidebar aria-controls="workspace-sidebar" aria-expanded="false" aria-label="Open navigation"><span class="hero-bars-3"></span></button>
+      <div class="breadcrumbs"><span class="breadcrumb-workspace">Workspace</span><span class="breadcrumb-divider">/</span><span class={@navigation.icon}></span><strong><%= @navigation.label %></strong></div>
+      <div class="topbar-actions">
+        <button type="button" class="command-trigger" data-open-command aria-label="Search sections"><span class="hero-magnifying-glass"></span><span>Go to a section…</span><kbd>⌘ K</kbd></button>
+        <span class="environment-pill"><i class="status-dot"></i><%= if Application.get_env(:supavisor, :env) == :dev, do: "Local", else: "Self hosted" %></span>
+      </div>
+    </header>
+    <main id="workspace-content" class="admin-content" tabindex="-1">
+      <div :if={Phoenix.Flash.get(@flash, :info)} class="notice notice-info" role="status"><span class="hero-check-circle"></span><%= Phoenix.Flash.get(@flash, :info) %></div>
+      <div :if={Phoenix.Flash.get(@flash, :error)} class="notice notice-error" role="alert"><span class="hero-exclamation-circle"></span><%= Phoenix.Flash.get(@flash, :error) %></div>
+      <%= @inner_content %>
+      <footer class="workspace-footer"><span>Supavisor Console</span><span>Built around your data<span class="footer-dot">·</span>Powered by LiveView</span></footer>
+    </main>
+  </div>
+  <dialog id="workspace-command" class="command-dialog" aria-label="Go to a section" phx-update="ignore">
+    <div class="command-input-row"><span class="hero-magnifying-glass"></span><input type="search" placeholder="Where do you want to go?" aria-label="Filter sections" autocomplete="off" /><button class="quiet-button" data-close-command aria-label="Close search"><kbd>Esc</kbd></button></div>
+    <div class="command-results">
+      <.link :for={item <- SupavisorWeb.AdminNavigation.items()} navigate={item.path} class="command-result" data-search-label={String.downcase(item.label)}><span class={item.icon}></span><%= item.label %><span class="hero-arrow-up-right"></span></.link>
+      <p class="command-no-results" hidden>No sections found.</p>
+    </div>
+    <div class="command-footer">Choose a destination <span>↵ to open</span></div>
+  </dialog>
+</div>

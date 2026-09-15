@@ -372,6 +372,7 @@ defmodule Supavisor.Tenants do
       {num, _} when num > 0 ->
         cleanup_result = Supavisor.del_all_cache_dist(id)
         Logger.info("Delete cache dist on delete #{id}: #{inspect(cleanup_result)}")
+        Phoenix.PubSub.broadcast_from(Supavisor.PubSub, self(), "admin:tenants", :tenants_changed)
         true
 
       _ ->
@@ -382,6 +383,7 @@ defmodule Supavisor.Tenants do
   defp with_cache_invalidation(result, opts) do
     case result do
       {:ok, %Tenant{external_id: external_id}} ->
+        Phoenix.PubSub.broadcast_from(Supavisor.PubSub, self(), "admin:tenants", :tenants_changed)
         operation = Keyword.get(opts, :operation, "operation")
 
         cleanup_result = Supavisor.del_all_cache_dist(external_id)

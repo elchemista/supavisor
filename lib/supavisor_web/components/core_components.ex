@@ -13,7 +13,10 @@ defmodule SupavisorWeb.CoreComponents do
   attr(:readonly, :boolean, default: false)
   attr(:required, :boolean, default: false)
   attr(:rows, :string, default: nil)
-  attr(:rest, :global)
+
+  attr(:rest, :global,
+    include: ~w(autocomplete maxlength minlength min max step placeholder spellcheck)
+  )
 
   def input(%{type: "select"} = assigns) do
     ~H"""
@@ -106,7 +109,7 @@ defmodule SupavisorWeb.CoreComponents do
     ~H"""
     <div class="stat-card">
       <div class="stat-head">
-        <span :if={@icon} class={["stat-icon", @icon]}></span>
+        <span :if={@icon} class="stat-icon"><span class={@icon}></span></span>
         <span class="stat-label"><%= @label %></span>
       </div>
       <div class="stat-value"><%= @value %></div>

@@ -2,6 +2,7 @@ defmodule SupavisorWeb.AdminTenantForm do
   @moduledoc false
 
   alias Supavisor.Tenants.Tenant
+  alias SupavisorWeb.AdminForm
 
   @default_auth_query "SELECT rolname, rolpassword FROM pg_authid WHERE rolname=$1"
 
@@ -163,6 +164,32 @@ defmodule SupavisorWeb.AdminTenantForm do
     |> require_json_map(params, "feature_flags", "Feature flags must be a JSON object")
     |> require_auth_query(params)
     |> require_users(params)
+    |> AdminForm.integer(params, "db_port", 1, 65_535)
+    |> AdminForm.integer(params, "default_pool_size", 1)
+    |> AdminForm.integer(params, "default_max_clients", 1)
+    |> AdminForm.integer(params, "client_idle_timeout", 0)
+    |> AdminForm.integer(params, "client_heartbeat_interval", 1)
+    |> AdminForm.choice(params, "auth_mode", ["stored_users", "auth_query"])
+    |> validate_user_numbers(params)
+  end
+
+  defp validate_user_numbers(errors, params) do
+    Enum.reduce(normalized_user_rows(params), errors, fn user, errors ->
+      user_errors =
+        %{}
+        |> AdminForm.integer(user, "pool_size", 1)
+        |> AdminForm.integer(user, "pool_checkout_timeout", 1)
+        |> AdminForm.integer(user, "max_clients", 0, 2_147_483_647, true)
+
+      if user_errors == %{},
+        do: errors,
+        else:
+          add_error(
+            errors,
+            :base,
+            "User pool size and checkout timeout must be positive integers; max clients must be zero or greater"
+          )
+    end)
   end
 
   defp require_present(errors, params, field, message) do

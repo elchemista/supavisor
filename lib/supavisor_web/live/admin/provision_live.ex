@@ -1,6 +1,8 @@
 defmodule SupavisorWeb.Admin.ProvisionLive do
   use SupavisorWeb, :live_view
 
+  alias SupavisorWeb.AdminConnection
+
   alias SupavisorWeb.AdminProvisioning
   alias SupavisorWeb.AdminProvisioningForm
 
@@ -77,21 +79,19 @@ defmodule SupavisorWeb.Admin.ProvisionLive do
   defp connect_uri(%{database_name: database_name, generated_password: password} = result) do
     username = connect_username(result)
 
-    "postgresql://#{username}:#{URI.encode_www_form(password)}@localhost:#{transaction_port()}/#{database_name}"
+    AdminConnection.uri("postgresql", username, password, database_name, transaction_port())
   end
 
   defp ecto_uri(%{database_name: database_name, generated_password: password} = result) do
     username = connect_username(result)
 
-    "ecto://#{username}:#{URI.encode_www_form(password)}@localhost:#{transaction_port()}/#{database_name}"
+    AdminConnection.uri("ecto", username, password, database_name, transaction_port())
   end
 
   defp ecto_config_result(result) do
     """
-    config :vext, MyApp.Repo,
+    config :my_app, MyApp.Repo,
       url: "#{ecto_uri(result)}",
-      stacktrace: true,
-      show_sensitive_data_on_connection_error: true,
       pool_size: 10
     """
   end
@@ -105,19 +105,29 @@ defmodule SupavisorWeb.Admin.ProvisionLive do
   end
 
   defp provision_sample_uri(params) do
-    "postgresql://#{provision_client_username(params)}:GENERATED_PASSWORD@localhost:#{transaction_port()}/#{provision_database(params)}"
+    AdminConnection.uri(
+      "postgresql",
+      provision_client_username(params),
+      "GENERATED_PASSWORD",
+      provision_database(params),
+      transaction_port()
+    )
   end
 
   defp provision_ecto_uri(params) do
-    "ecto://#{provision_client_username(params)}:GENERATED_PASSWORD@localhost:#{transaction_port()}/#{provision_database(params)}"
+    AdminConnection.uri(
+      "ecto",
+      provision_client_username(params),
+      "GENERATED_PASSWORD",
+      provision_database(params),
+      transaction_port()
+    )
   end
 
   defp provision_ecto_config(params) do
     """
-    config :vext, MyApp.Repo,
+    config :my_app, MyApp.Repo,
       url: "#{provision_ecto_uri(params)}",
-      stacktrace: true,
-      show_sensitive_data_on_connection_error: true,
       pool_size: 10
     """
   end
@@ -165,7 +175,7 @@ defmodule SupavisorWeb.Admin.ProvisionLive do
       <div class="connection-recipe">
         <div>
           <span>Connect to Supavisor host</span>
-          <code>localhost</code>
+          <code><%= AdminConnection.host() %></code>
         </div>
         <div>
           <span>Transaction pool port</span>
@@ -351,33 +361,8 @@ defmodule SupavisorWeb.Admin.ProvisionLive do
             </span>
           </label>
 
-          <label class={"auth-mode-card #{if @params["auth_mode"] == "auth_query", do: "is-selected"}"}>
-            <input
-              type="radio"
-              name="provision[auth_mode]"
-              value="auth_query"
-              checked={@params["auth_mode"] == "auth_query"}
-            />
-            <span>
-              <strong>Auth query</strong>
-              <small>Use the created Postgres username as the manager that checks other users in Postgres.</small>
-            </span>
-          </label>
         </div>
-
-        <div :if={@params["auth_mode"] == "auth_query"} class="form-grid form-grid-wide">
-          <.input
-            type="textarea"
-            label="Auth query"
-            name="provision[auth_query]"
-            value={@params["auth_query"]}
-            rows="3"
-            errors={error(@errors, "auth_query")}
-          />
-          <p class="form-note">
-            The provisioned manager role must have permission to run this query.
-          </p>
-        </div>
+        <p class="form-note">The new role owns this database. To use auth-query authentication, configure an existing manager role through a tenant connection profile.</p>
       </section>
 
       <section class="form-section">
@@ -443,7 +428,7 @@ defmodule SupavisorWeb.Admin.ProvisionLive do
         <div class="connection-recipe">
           <div>
             <span>Supavisor host</span>
-            <code>localhost</code>
+            <code><%= AdminConnection.host() %></code>
           </div>
           <div>
             <span>Transaction pool port</span>
@@ -478,7 +463,7 @@ defmodule SupavisorWeb.Admin.ProvisionLive do
         </div>
       </section>
 
-      <details class="form-section">
+      <details class="form-section" open={map_size(@errors) > 0}>
         <summary class="advanced-summary">
           <span class="hero-adjustments-horizontal-mini"></span>
           Advanced pooling and network settings

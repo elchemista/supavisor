@@ -12,6 +12,10 @@ defmodule SupavisorWeb.Endpoint do
 
   socket "/live", Phoenix.LiveView.Socket, websocket: [connect_info: [session: @session_options]]
 
+  socket "/services/socket", SupavisorWeb.ServiceSocket,
+    websocket: [check_origin: false, max_frame_size: 16_384],
+    longpoll: false
+
   plug Phoenix.LiveDashboard.RequestLogger,
     param_key: "request_logger",
     cookie_key: "request_logger"

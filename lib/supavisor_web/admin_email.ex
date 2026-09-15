@@ -19,7 +19,7 @@ defmodule SupavisorWeb.AdminEmail do
     """)
     |> html_body("""
     <p>Use this link to sign in to Supavisor Admin:</p>
-    <p><a href="#{url}">Sign in to Supavisor Admin</a></p>
+    <p><a href="#{url}" target="_top">Sign in to Supavisor Admin</a></p>
     <p>This link expires in #{div(ttl_seconds, 60)} minutes and can be used once.</p>
     """)
   end

@@ -3,6 +3,7 @@ defmodule SupavisorWeb.AdminProvisioningForm do
 
   alias Supavisor.Helpers
   alias SupavisorWeb.AdminProvisioning
+  alias SupavisorWeb.AdminForm
 
   @default_auth_query "SELECT rolname, rolpassword FROM pg_authid WHERE rolname=$1"
 
@@ -68,6 +69,20 @@ defmodule SupavisorWeb.AdminProvisioningForm do
   def errors_from_reason(:invalid_identifier),
     do: %{base: ["Database and role names must be lowercase Postgres identifiers."]}
 
+  def errors_from_reason(:unsupported_auth_mode),
+    do: %{
+      base: [
+        "Provision new databases with a stored user. Configure an existing manager separately for auth-query authentication."
+      ]
+    }
+
+  def errors_from_reason(:connection_failed),
+    do: %{
+      base: [
+        "Could not connect to PostgreSQL. Check the server address and provisioner credentials."
+      ]
+    }
+
   def errors_from_reason({:tenant_changeset, changeset}) do
     errors =
       Ecto.Changeset.traverse_errors(changeset, fn {message, opts} ->
@@ -111,6 +126,14 @@ defmodule SupavisorWeb.AdminProvisioningForm do
     |> require_integer(params, "client_heartbeat_interval", "Heartbeat interval must be a number")
     |> require_auth_query(params)
     |> require_upstream_tls_ca(params)
+    |> AdminForm.integer(params, "target_port", 1, 65_535)
+    |> AdminForm.integer(params, "default_pool_size", 1)
+    |> AdminForm.integer(params, "default_max_clients", 1)
+    |> AdminForm.integer(params, "client_idle_timeout", 0)
+    |> AdminForm.integer(params, "client_heartbeat_interval", 1)
+    |> AdminForm.choice(params, "auth_mode", ["stored_users"])
+    |> AdminForm.choice(params, "ip_version", ["auto", "v4", "v6"])
+    |> AdminForm.choice(params, "upstream_verify", ["none", "peer"])
   end
 
   defp require_present(errors, params, field, message) do

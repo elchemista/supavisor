@@ -5,7 +5,7 @@ defmodule Supavisor.MixProject do
     [
       app: :supavisor,
       version: version(),
-      elixir: "~> 1.14",
+      elixir: "~> 1.18",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -56,6 +56,7 @@ defmodule Supavisor.MixProject do
       {:phoenix_live_view, "~> 1.0"},
       {:phoenix_live_dashboard, "~> 0.7"},
       {:swoosh, "~> 1.25"},
+      {:gen_smtp, "~> 1.0"},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:tailwind, "~> 0.4", runtime: Mix.env() == :dev},
       {:heroicons,
@@ -99,6 +100,7 @@ defmodule Supavisor.MixProject do
       {:eflambe, "~> 0.3.1", only: :dev},
 
       # Test utilities
+      {:lazy_html, "~> 0.1.0", only: :test},
       {:excoveralls, ">= 0.0.0", only: [:dev, :test]},
       {:stream_data, "~> 1.0", only: [:dev, :test]},
       # Override needed due to eflambe
@@ -124,8 +126,8 @@ defmodule Supavisor.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
-      setup: ["deps.get", "ecto.setup"],
-      "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
+      setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
+      "ecto.setup": ["ecto.create", "supavisor.migrate"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["tailwind supavisor", "esbuild supavisor"],

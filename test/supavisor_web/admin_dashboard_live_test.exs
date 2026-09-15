@@ -40,6 +40,34 @@ defmodule SupavisorWeb.AdminDashboardLiveTest do
     assert html =~ "Database username to create"
   end
 
+  test "server overview shows databases and PostgreSQL roles", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/admin/postgres")
+    html = render_async(view)
+    assert html =~ "PostgreSQL roles"
+    assert html =~ "supavisor_test"
+    assert html =~ "postgres"
+    assert html =~ "Add connection"
+  end
+
+  test "existing database selection prefills the connection", %{conn: conn} do
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/admin/tenants/new?#{%{db_database: "selected_db", db_host: "db.internal", db_port: 5440}}"
+      )
+
+    assert has_element?(view, "input[name='tenant[db_database]'][value='selected_db']")
+    assert has_element?(view, "input[name='tenant[db_host]'][value='db.internal']")
+  end
+
+  test "invalid pool values produce an error without crashing", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/admin/tenants/new")
+    params = tenant_params("invalid_pool", "stored_users") |> Map.put("default_pool_size", "")
+    html = view |> form("#tenant-form", tenant: params) |> render_submit()
+    assert html =~ "Enter a number from 1"
+    refute Tenants.get_tenant_by_external_id("invalid_pool")
+  end
+
   test "authenticated admin can create stored-user tenant", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/admin/tenants/new")
 
@@ -58,6 +86,8 @@ defmodule SupavisorWeb.AdminDashboardLiveTest do
 
   test "authenticated admin can create auth-query tenant", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/admin/tenants/new")
+
+    view |> form("#tenant-form", tenant: %{"auth_mode" => "auth_query"}) |> render_change()
 
     params =
       "auth_query_dashboard_tenant"
@@ -115,14 +145,14 @@ defmodule SupavisorWeb.AdminDashboardLiveTest do
     {:ok, view, _html} = live(conn, ~p"/admin")
 
     view
-    |> element("button[phx-value-external-id='admin_delete_tenant']", "Delete")
+    |> element("button[phx-value-external-id='admin_delete_tenant'][aria-label='Delete tenant']")
     |> render_click()
 
     refute Tenants.get_tenant_by_external_id("admin_delete_tenant")
   end
 
   defp tenant_params(external_id, auth_mode) do
-    %{
+    params = %{
       "external_id" => external_id,
       "db_host" => "localhost",
       "db_port" => "6432",
@@ -146,7 +176,6 @@ defmodule SupavisorWeb.AdminDashboardLiveTest do
       "jit_api_url" => "",
       "users" => %{
         "0" => %{
-          "id" => "",
           "db_user" => "postgres",
           "db_user_alias" => "postgres",
           "db_password" => "postgres",
@@ -158,5 +187,7 @@ defmodule SupavisorWeb.AdminDashboardLiveTest do
         }
       }
     }
+
+    if auth_mode == "stored_users", do: Map.delete(params, "auth_query"), else: params
   end
 end
