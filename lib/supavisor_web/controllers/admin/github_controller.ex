@@ -1,9 +1,22 @@
 defmodule SupavisorWeb.Admin.GithubController do
   use SupavisorWeb, :controller
-  alias SupavisorWeb.{AdminAuth, AdminSettings}
+  alias SupavisorWeb.{AdminAuth, AdminCap, AdminLoginLimiter, AdminSettings}
   @state_ttl :timer.minutes(10)
 
-  def start(conn, _params) do
+  def start(conn, params) do
+    cond do
+      not AdminLoginLimiter.allow_oauth?(conn.remote_ip) ->
+        failure(conn, "Too many sign-in attempts. Try again in a minute.")
+
+      AdminCap.verify(conn, params["cap-token"]) != :ok ->
+        failure(conn, "Please complete the anti-bot verification and try again.")
+
+      true ->
+        start_oauth(conn)
+    end
+  end
+
+  defp start_oauth(conn) do
     case AdminSettings.github_config() do
       {:ok, config} ->
         state = random_token()

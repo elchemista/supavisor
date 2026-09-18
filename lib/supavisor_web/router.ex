@@ -14,6 +14,13 @@ defmodule SupavisorWeb.Router do
     plug(SupavisorWeb.AdminAuth, :fetch_current_admin)
   end
 
+  pipeline :admin_cap do
+    plug(:accepts, ["json"])
+    plug(:fetch_session)
+    plug(:protect_from_forgery)
+    plug(:put_secure_browser_headers)
+  end
+
   pipeline :require_admin do
     plug(SupavisorWeb.AdminAuth, :require_authenticated_admin)
   end
@@ -22,6 +29,15 @@ defmodule SupavisorWeb.Router do
     plug(:accepts, ["json"])
     plug(:check_auth, [:api_jwt_secret, :api_blocklist])
     plug(OpenApiSpex.Plug.PutApiSpec, module: SupavisorWeb.ApiSpec)
+  end
+
+  pipeline :service_api do
+    plug(:accepts, ["json"])
+    plug(SupavisorWeb.Services.Auth)
+  end
+
+  pipeline :media_api do
+    plug(SupavisorWeb.Services.Auth)
   end
 
   pipeline :metrics do
@@ -78,6 +94,28 @@ defmodule SupavisorWeb.Router do
     # get("/clusters/:alias/terminate", ClusterController, :terminate)
   end
 
+  scope "/api/services/v1", SupavisorWeb.Services do
+    pipe_through(:service_api)
+    get("/status", ServiceController, :status)
+    get("/models", ServiceController, :models)
+    post("/embeddings", ServiceController, :embeddings)
+    post("/tts", ServiceController, :tts)
+    post("/stt", ServiceController, :stt)
+    post("/ai", ServiceController, :ai)
+    get("/requests/:id", ServiceController, :request)
+    post("/requests/:id/cancel", ServiceController, :cancel)
+    get("/mailboxes", ServiceController, :mailboxes)
+    get("/mail/messages", ServiceController, :messages)
+    get("/mail/messages/:id", ServiceController, :message)
+    post("/mail/send", ServiceController, :send_mail)
+  end
+
+  scope "/api/services/v1/audio", SupavisorWeb.Services do
+    pipe_through(:media_api)
+    post("/", AudioController, :create)
+    get("/:id", AudioController, :show)
+  end
+
   scope "/metrics", SupavisorWeb do
     pipe_through(:metrics)
 
@@ -92,25 +130,34 @@ defmodule SupavisorWeb.Router do
     post("/login", SessionController, :create)
     post("/auth/github", GithubController, :start)
     get("/auth/github/callback", GithubController, :callback)
-    get("/magic/:token", SessionController, :verify)
+    get("/magic/:token", SessionController, :verify, log: false)
     delete("/logout", SessionController, :delete)
+  end
+
+  scope "/admin" do
+    pipe_through(:admin_cap)
+    forward("/cap", SupavisorWeb.AdminCap)
   end
 
   scope "/admin", SupavisorWeb.Admin, as: :admin do
     pipe_through([:browser, :admin_fetch, :require_admin])
 
+    post("/password", SessionController, :password)
+
+    get("/postgres/backups/:id/:kind", BackupController, :download)
+
     live_session :admin, on_mount: [SupavisorWeb.AdminAuth, SupavisorWeb.AdminNavigation] do
       live("/", DashboardLive, :index)
       live("/postgres", PostgresLive, :index)
+      live("/postgres/backups", BackupLive, :index)
       live("/api", ApiLive, :index)
       live("/authorization", AuthorizationLive, :index)
       live("/metrics", MetricsLive, :index)
-      live("/mailer", ServicesLive, :mailer)
-      live("/embedding", ServicesLive, :embedding)
-      live("/stt", ServicesLive, :stt)
-      live("/tts", ServicesLive, :tts)
-      live("/ai-model", ServicesLive, :ai_model)
-      live("/importazioni", ServicesLive, :imports)
+      live("/mailer", MailerLive, :index)
+      live("/embedding", EmbeddingLive, :index)
+      live("/stt", LocalModelsLive, :stt)
+      live("/tts", LocalModelsLive, :tts)
+      live("/ai-model", LocalModelsLive, :ai_model)
       live("/provision", ProvisionLive, :new)
       live("/tenants/new", TenantLive, :new)
       live("/tenants/:external_id/edit", TenantLive, :edit)

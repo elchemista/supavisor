@@ -1,6 +1,6 @@
 defmodule SupavisorWeb.Admin.AuthorizationLive do
   use SupavisorWeb, :live_view
-  alias SupavisorWeb.AdminSettings
+  alias SupavisorWeb.{AdminSettings, AdminCredential}
 
   @impl true
   def mount(_params, _session, socket), do: {:ok, load_settings(socket)}
@@ -56,6 +56,7 @@ defmodule SupavisorWeb.Admin.AuthorizationLive do
     settings = AdminSettings.get()
 
     assign(socket,
+      password_configured: AdminCredential.configured?(socket.assigns.current_admin_email),
       emails: Enum.join(settings.admin_emails, "\n"),
       admin_count: length(settings.admin_emails),
       github: %{
@@ -74,6 +75,23 @@ defmodule SupavisorWeb.Admin.AuthorizationLive do
   def render(assigns) do
     ~H"""
     <section class="page-hero"><div><div class="eyebrow"><span class="eyebrow-line"></span> YOUR WORKSPACE, YOUR RULES</div><h1>Authorization<span class="heading-dot">.</span></h1><p class="page-subtitle">Choose who can access your workspace and how they sign in.</p></div><span class="protocol-badge"><%= @admin_count %> <%= if @admin_count == 1, do: "admin", else: "admins" %></span></section>
+    <section id="password" class="form-section password-settings">
+      <div class="form-section-heading">
+        <span class="step-marker"><span class="hero-key"></span></span>
+        <div><h2><%= if @password_configured, do: "Your password", else: "Set your sign-in password" %></h2><p>Use your email and password to sign in. No email service required.</p></div>
+        <span class={["status-badge", !@password_configured && "pending"]}><i class="status-dot"></i><%= if @password_configured, do: "Configured", else: "Set up now" %></span>
+      </div>
+      <.form for={%{}} as={:password} action={~p"/admin/password"} method="post" id="admin-password-form">
+        <input type="hidden" name="username" value={@current_admin_email} autocomplete="username" />
+        <div class="form-grid">
+          <.input :if={@password_configured} type="password" name="password[current_password]" value="" label="Current password" autocomplete="current-password" required maxlength="128" />
+          <.input type="password" name="password[new_password]" value="" label="New password" autocomplete="new-password" required minlength="15" maxlength="128" />
+          <.input type="password" name="password[password_confirmation]" value="" label="Confirm new password" autocomplete="new-password" required minlength="15" maxlength="128" />
+        </div>
+        <p class="field-help">Use 15–128 characters. A long, unique passphrase works well. Saving signs out your other sessions.</p>
+        <div class="form-actions"><button type="submit" class="primary-button"><span class="hero-lock-closed"></span><%= if @password_configured, do: "Update password", else: "Save password" %></button></div>
+      </.form>
+    </section>
     <div class="authorization-grid">
       <section class="form-section auth-admins">
         <div class="form-section-heading"><span class="step-marker"><span class="hero-user-group"></span></span><div><h2>Admin email addresses</h2><p>Only these addresses can sign in to the console.</p></div></div>

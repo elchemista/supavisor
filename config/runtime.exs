@@ -17,6 +17,19 @@ parse_boolean = fn name, default ->
   end
 end
 
+if System.get_env("LOCAL_ONNX_ENABLED") != nil do
+  config :supavisor, Supavisor.Services.LocalModels,
+    enabled: parse_boolean.("LOCAL_ONNX_ENABLED", false)
+end
+
+if directory = System.get_env("LOCAL_ONNX_MODEL_DIR") do
+  unless Path.type(directory) == :absolute do
+    raise "LOCAL_ONNX_MODEL_DIR must be an absolute directory containing stt, tts and ai"
+  end
+
+  config :supavisor, Supavisor.Services.LocalModels, directory: directory
+end
+
 if config_env() == :prod do
   for name <- ~w(DATABASE_URL VAULT_ENC_KEY) do
     if System.get_env(name) in [nil, ""], do: raise("Environment variable #{name} is missing")
@@ -71,7 +84,17 @@ if bind_address = System.get_env("HTTP_BIND_ADDRESS") do
   end
 end
 
+if bind_address = System.get_env("PROXY_BIND_ADDRESS") do
+  case :inet.parse_address(String.to_charlist(bind_address)) do
+    {:ok, address} -> config :supavisor, :proxy_bind_address, address
+    _ -> raise "PROXY_BIND_ADDRESS must be an IPv4 or IPv6 address"
+  end
+end
+
 if config_env() != :test do
+  config :supavisor, :trust_proxy_headers, parse_boolean.("TRUST_PROXY_HEADERS", false)
+  config :supavisor, :admin_email_login_enabled, System.get_env("SMTP_HOST") not in [nil, ""]
+
   base_url =
     System.get_env("ADMIN_BASE_URL", "http://localhost:#{System.get_env("PORT", "4000")}")
 
@@ -372,3 +395,51 @@ if System.get_env("LOGS_ENGINE") == "logflare" do
   config :logger,
     backends: [LogflareLogger.HttpBackend]
 end
+
+# Workspace services store keys and model files outside the release directory.
+service_data_dir = System.get_env("SERVICE_DATA_DIR", Path.expand("../var/services", __DIR__))
+config :supavisor, :service_mail_key_dir, Path.join(service_data_dir, "mail-keys")
+
+unless System.get_env("FASTEMBED_CACHE_DIR") || System.get_env("HF_HOME") do
+  System.put_env("FASTEMBED_CACHE_DIR", Path.join(service_data_dir, "models"))
+end
+
+{:ok, service_smtp_address} =
+  System.get_env("SERVICE_SMTP_BIND", "127.0.0.1")
+  |> String.to_charlist()
+  |> :inet.parse_address()
+
+service_smtp_tls =
+  case {System.get_env("SERVICE_SMTP_CERTFILE"), System.get_env("SERVICE_SMTP_KEYFILE")} do
+    {cert, key} when is_binary(cert) and is_binary(key) ->
+      [certfile: String.to_charlist(cert), keyfile: String.to_charlist(key)]
+
+    _ ->
+      []
+  end
+
+config :supavisor, :inbound_smtp,
+  enabled:
+    System.get_env("SERVICE_SMTP_ENABLED", if(config_env() == :dev, do: "true", else: "false")) ==
+      "true",
+  address: service_smtp_address,
+  port: String.to_integer(System.get_env("SERVICE_SMTP_PORT", "2525")),
+  hostname: System.get_env("SERVICE_SMTP_HOSTNAME", "localhost"),
+  tls_options: service_smtp_tls
+
+# Optional retention. Zero keeps messages until an administrator deletes them.
+config :supavisor,
+       :service_mail_retention_days,
+       max(0, String.to_integer(System.get_env("SERVICE_MAIL_RETENTION_DAYS", "0")))
+
+# Private disk storage for logical PostgreSQL backups.
+config :supavisor, Supavisor.Backups,
+  directory:
+    Path.expand(System.get_env("BACKUP_DIRECTORY", Path.join(service_data_dir, "backups"))),
+  node_id: System.get_env("BACKUP_NODE_ID", to_string(elem(:inet.gethostname(), 1))),
+  pg_bin: System.get_env("BACKUP_PG_BIN"),
+  max_bytes: String.to_integer(System.get_env("BACKUP_MAX_BYTES", "2147483648")),
+  quota_bytes: String.to_integer(System.get_env("BACKUP_QUOTA_BYTES", "21474836480")),
+  timeout_seconds: String.to_integer(System.get_env("BACKUP_TIMEOUT_SECONDS", "3600"))
+
+config :supavisor, Supavisor.Services.Media, directory: Path.join(service_data_dir, "tmp")

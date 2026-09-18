@@ -36,7 +36,19 @@ defmodule SupavisorWeb.Admin.PostgresLive do
       )
       |> stream_page()
 
-    {:ok, if(connected?(socket), do: refresh(socket), else: socket)}
+    {:ok, socket}
+  end
+
+  @impl true
+  def handle_params(params, _, socket) do
+    selected =
+      case Integer.parse(params["server"] || "0") do
+        {index, ""} when index >= 0 and index < length(socket.assigns.targets) -> index
+        _ -> 0
+      end
+
+    socket = socket |> assign(selected: selected, overview: nil, page: 1) |> stream_page()
+    {:noreply, if(connected?(socket), do: refresh(socket), else: socket)}
   end
 
   @impl true
@@ -63,8 +75,7 @@ defmodule SupavisorWeb.Admin.PostgresLive do
   def handle_event("select", %{"target" => target}, socket) do
     case Integer.parse(target) do
       {index, ""} when index >= 0 and index < length(socket.assigns.targets) ->
-        {:noreply,
-         socket |> assign(selected: index, overview: nil, page: 1) |> stream_page() |> refresh()}
+        {:noreply, push_patch(socket, to: ~p"/admin/postgres?#{[server: index]}")}
 
       _ ->
         {:noreply, socket}
@@ -145,71 +156,250 @@ defmodule SupavisorWeb.Admin.PostgresLive do
         <h1>PostgreSQL<span class="heading-dot">.</span></h1>
         <p class="page-subtitle">A clear view of your data. Everything under control.</p>
       </div>
-      <.link class="primary-button" navigate={~p"/admin/provision"}><span class="hero-plus"></span> Create database</.link>
+      <.link class="primary-button" navigate={~p"/admin/provision"}>
+        <span class="hero-plus"></span> Create database
+      </.link>
     </section>
 
     <div class="stats-grid">
-      <.stat_card icon="hero-circle-stack" label="Database" value={if @overview, do: @databases, else: "—"} hint="On your server" />
-      <.stat_card icon="hero-users" label="Roles" value={if @overview, do: @roles, else: "—"} hint="PostgreSQL identities" />
-      <.stat_card icon="hero-arrows-right-left" label="Connections" value={if @overview, do: @connections, else: "—"} hint="Current database sessions" />
-      <.stat_card icon="hero-key" label="Login roles" value={if @overview, do: @logins, else: "—"} hint="Database access" />
+      <.stat_card
+        icon="hero-circle-stack"
+        label="Database"
+        value={if @overview, do: @databases, else: "—"}
+        hint="On your server"
+      />
+      <.stat_card
+        icon="hero-users"
+        label="Roles"
+        value={if @overview, do: @roles, else: "—"}
+        hint="PostgreSQL identities"
+      />
+      <.stat_card
+        icon="hero-arrows-right-left"
+        label="Connections"
+        value={if @overview, do: @connections, else: "—"}
+        hint="Current database sessions"
+      />
+      <.stat_card
+        icon="hero-key"
+        label="Login roles"
+        value={if @overview, do: @logins, else: "—"}
+        hint="Database access"
+      />
     </div>
 
     <div class="server-strip">
       <div class="server-strip-icon"><span class="hero-server-stack"></span></div>
-      <div class="server-selector"><span class="micro-label">SERVER POSTGRESQL</span>
-        <form phx-change="select"><select name="target" aria-label="PostgreSQL server">
-          <option :for={{{host, port}, index} <- Enum.with_index(@targets)} value={index} selected={index == @selected}><%= host %>:<%= port %></option>
-        </select></form>
+      <div class="server-selector">
+        <span class="micro-label">SERVER POSTGRESQL</span>
+        <form phx-change="select">
+          <select name="target" aria-label="PostgreSQL server">
+            <option
+              :for={{{host, port}, index} <- Enum.with_index(@targets)}
+              value={index}
+              selected={index == @selected}
+            >
+              {host}:{port}
+            </option>
+          </select>
+        </form>
       </div>
-      <span :if={@overview} class="status-badge"><i class="status-dot"></i>Connected <span class="version-label">v<%= @overview.version %></span></span>
+      <span :if={@overview} class="status-badge">
+        <i class="status-dot"></i>Connected <span class="version-label">v{@overview.version}</span>
+      </span>
       <span :if={@loading} class="muted small" role="status">Refreshing…</span>
-      <button class="quiet-button refresh-button" phx-click="refresh" disabled={@loading} aria-label="Refresh server" title="Refresh server"><span class={["hero-arrow-path", @loading && "is-spinning"]}></span></button>
+      <button
+        class="quiet-button refresh-button"
+        phx-click="refresh"
+        disabled={@loading}
+        aria-label="Refresh server"
+        title="Refresh server"
+      >
+        <span class={["hero-arrow-path", @loading && "is-spinning"]}></span>
+      </button>
     </div>
-    <p :if={@error} class="notice notice-error" role="alert"><%= @error %></p>
+    <p :if={@error} class="notice notice-error" role="alert">{@error}</p>
 
     <section class="data-panel">
       <div class="panel-toolbar">
         <div class="panel-tabs" role="tablist" aria-label="PostgreSQL data">
-          <button role="tab" aria-selected={to_string(@tab == "databases")} class={@tab == "databases" && "is-active"} phx-click="tab" phx-value-tab="databases"><span class="hero-circle-stack"></span> Database <span class="count-badge"><%= @databases %></span></button>
-          <button role="tab" aria-selected={to_string(@tab == "roles")} class={@tab == "roles" && "is-active"} phx-click="tab" phx-value-tab="roles"><span class="hero-users"></span> Roles <span class="count-badge"><%= @roles %></span></button>
+          <button
+            role="tab"
+            aria-selected={to_string(@tab == "databases")}
+            class={@tab == "databases" && "is-active"}
+            phx-click="tab"
+            phx-value-tab="databases"
+          >
+            <span class="hero-circle-stack"></span>
+            Database <span class="count-badge">{@databases}</span>
+          </button>
+          <button
+            role="tab"
+            aria-selected={to_string(@tab == "roles")}
+            class={@tab == "roles" && "is-active"}
+            phx-click="tab"
+            phx-value-tab="roles"
+          >
+            <span class="hero-users"></span> Roles <span class="count-badge">{@roles}</span>
+          </button>
         </div>
-        <form class="search-field" phx-change="search" phx-submit="search"><span class="hero-magnifying-glass"></span><input type="search" name="search" value={@search} placeholder={if @tab == "databases", do: "Search databases…", else: "Search roles…"} aria-label="Search PostgreSQL" phx-debounce="180" /></form>
+        <form class="search-field" phx-change="search" phx-submit="search">
+          <span class="hero-magnifying-glass"></span>
+          <input
+            type="search"
+            name="search"
+            value={@search}
+            placeholder={if @tab == "databases", do: "Search databases…", else: "Search roles…"}
+            aria-label="Search PostgreSQL"
+            phx-debounce="180"
+          />
+        </form>
       </div>
-      <div :if={@overview == nil and @loading} class="skeleton-list" aria-label="Loading data"><div :for={_ <- 1..5} class="skeleton-row"><span></span><span></span><span></span></div></div>
+      <div :if={@overview == nil and @loading} class="skeleton-list" aria-label="Loading data">
+        <div :for={_ <- 1..5} class="skeleton-row"><span></span><span></span><span></span></div>
+      </div>
       <div class="table-scroll" hidden={@overview == nil}>
         <table hidden={@tab != "databases"} class="responsive-table">
-          <thead><tr><th>Database name</th><th>Owner</th><th>Size</th><th>Connections</th><th><span class="sr-only">Actions</span></th></tr></thead>
+          <thead>
+            <tr>
+              <th>Database name</th>
+              <th>Owner</th>
+              <th>Size</th>
+              <th>Connections</th>
+              <th><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
           <tbody id="postgres-databases" phx-update="stream">
-            <tr :for={{dom_id, %{values: [name, owner, size, connections]}} <- @streams.databases} id={dom_id}>
-              <td class="name-cell"><span class="resource-icon"><span class="hero-circle-stack"></span></span><strong><%= name %></strong></td>
-              <td data-label="Owner"><span class="owner-label"><span class="hero-user-circle"></span><%= owner %></span></td>
-              <td data-label="Size" class="mono muted"><%= size %></td>
-              <td data-label="Connections"><span class={["connection-count", connections > 0 && "has-connections"]}><i></i><%= connections %></span></td>
-              <td class="row-actions"><.link navigate={~p"/admin/tenants/new?#{%{db_database: name, db_host: elem(Enum.at(@targets, @selected), 0), db_port: elem(Enum.at(@targets, @selected), 1)}}"} class="row-link" aria-label={"Connect #{name}"}>Connect <span class="hero-arrow-up-right"></span></.link></td>
+            <tr
+              :for={{dom_id, %{values: [name, owner, size, connections]}} <- @streams.databases}
+              id={dom_id}
+            >
+              <td class="name-cell">
+                <span class="resource-icon"><span class="hero-circle-stack"></span></span><strong><%= name %></strong>
+              </td>
+              <td data-label="Owner">
+                <span class="owner-label"><span class="hero-user-circle"></span>{owner}</span>
+              </td>
+              <td data-label="Size" class="mono muted">{size}</td>
+              <td data-label="Connections">
+                <span class={["connection-count", connections > 0 && "has-connections"]}>
+                  <i></i>{connections}
+                </span>
+              </td>
+              <td class="row-actions">
+                <.link
+                  navigate={~p"/admin/postgres/backups?#{%{server: @selected, database: name}}"}
+                  class="row-link"
+                  aria-label={"Backup and restore #{name}"}
+                >
+                  <span class="hero-archive-box"></span> Backup / restore
+                </.link>
+                <.link
+                  navigate={
+                    ~p"/admin/tenants/new?#{%{db_database: name, db_host: elem(Enum.at(@targets, @selected), 0), db_port: elem(Enum.at(@targets, @selected), 1)}}"
+                  }
+                  class="row-link"
+                  aria-label={"Connect #{name}"}
+                >
+                  Connect <span class="hero-arrow-up-right"></span>
+                </.link>
+              </td>
             </tr>
           </tbody>
         </table>
         <table hidden={@tab != "roles"} class="responsive-table">
-          <thead><tr><th>Role name</th><th>Login</th><th>Create database</th><th>Create roles</th><th>Connection limit</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Role name</th>
+              <th>Login</th>
+              <th>Create database</th>
+              <th>Create roles</th>
+              <th>Connection limit</th>
+            </tr>
+          </thead>
           <tbody id="postgres-roles" phx-update="stream">
-            <tr :for={{dom_id, %{values: [name, login, createdb, createrole, limit]}} <- @streams.roles} id={dom_id}>
-              <td class="name-cell"><span class="resource-icon violet"><span class="hero-user"></span></span><strong><%= name %></strong></td>
-              <td data-label="Login"><span class={if login, do: "status-badge", else: "muted"}><%= if login, do: "Enabled", else: "Disabled" %></span></td>
-              <td data-label="Create database"><span class={if createdb, do: "permission-yes", else: "muted"}><%= if createdb, do: "Allowed", else: "—" %></span></td>
-              <td data-label="Create roles"><span class={if createrole, do: "permission-yes", else: "muted"}><%= if createrole, do: "Allowed", else: "—" %></span></td>
-              <td data-label="Connections" class="mono"><%= if limit == -1, do: "Unlimited", else: limit %></td>
+            <tr
+              :for={{dom_id, %{values: [name, login, createdb, createrole, limit]}} <- @streams.roles}
+              id={dom_id}
+            >
+              <td class="name-cell">
+                <span class="resource-icon violet"><span class="hero-user"></span></span><strong><%= name %></strong>
+              </td>
+              <td data-label="Login">
+                <span class={if login, do: "status-badge", else: "muted"}>
+                  {if login, do: "Enabled", else: "Disabled"}
+                </span>
+              </td>
+              <td data-label="Create database">
+                <span class={if createdb, do: "permission-yes", else: "muted"}>
+                  {if createdb, do: "Allowed", else: "—"}
+                </span>
+              </td>
+              <td data-label="Create roles">
+                <span class={if createrole, do: "permission-yes", else: "muted"}>
+                  {if createrole, do: "Allowed", else: "—"}
+                </span>
+              </td>
+              <td data-label="Connections" class="mono">
+                {if limit == -1, do: "Unlimited", else: limit}
+              </td>
             </tr>
           </tbody>
         </table>
-        <.empty_state :if={@filtered_count == 0} icon="hero-magnifying-glass" title="No results found" description="Try searching for another name." />
+        <.empty_state
+          :if={@filtered_count == 0}
+          icon="hero-magnifying-glass"
+          title="No results found"
+          description="Try searching for another name."
+        />
       </div>
-      <div class="panel-pagination"><span><strong><%= @filtered_count %></strong> results <span class="pagination-detail">· up to 500 per server</span></span><div><button class="quiet-button" phx-click="page" phx-value-direction="prev" disabled={@page <= 1} aria-label="Previous page"><span class="hero-chevron-left"></span></button><span><%= @page %> <span class="muted">/ <%= @pages %></span></span><button class="quiet-button" phx-click="page" phx-value-direction="next" disabled={@page >= @pages} aria-label="Next page"><span class="hero-chevron-right"></span></button></div></div>
+      <div class="panel-pagination">
+        <span>
+          <strong>{@filtered_count}</strong>
+          results <span class="pagination-detail">· up to 500 per server</span>
+        </span>
+        <div>
+          <button
+            class="quiet-button"
+            phx-click="page"
+            phx-value-direction="prev"
+            disabled={@page <= 1}
+            aria-label="Previous page"
+          >
+            <span class="hero-chevron-left"></span>
+          </button>
+          <span>{@page} <span class="muted">/ {@pages}</span></span><button
+            class="quiet-button"
+            phx-click="page"
+            phx-value-direction="next"
+            disabled={@page >= @pages}
+            aria-label="Next page"
+          ><span class="hero-chevron-right"></span></button>
+        </div>
+      </div>
     </section>
     <div class="quick-notes">
-      <div><span class="note-icon hero-shield-check"></span><div><strong>Your database overview</strong><p>This view reads your server metadata.</p></div></div>
-      <div><span class="note-icon hero-arrows-right-left"></span><div><strong>Ready for pooling</strong><p>Connect a database to a Supavisor tenant.</p></div></div>
-      <div><span class="note-icon hero-arrow-path"></span><div><strong>A snapshot of your server</strong><p>Refresh to read the current server state.</p></div></div>
+      <div>
+        <span class="note-icon hero-shield-check"></span>
+        <div>
+          <strong>Your database overview</strong>
+          <p>This view reads your server metadata.</p>
+        </div>
+      </div>
+      <div>
+        <span class="note-icon hero-arrows-right-left"></span>
+        <div>
+          <strong>Ready for pooling</strong>
+          <p>Connect a database to a Supavisor tenant.</p>
+        </div>
+      </div>
+      <div>
+        <span class="note-icon hero-arrow-path"></span>
+        <div>
+          <strong>A snapshot of your server</strong>
+          <p>Refresh to read the current server state.</p>
+        </div>
+      </div>
     </div>
     """
   end

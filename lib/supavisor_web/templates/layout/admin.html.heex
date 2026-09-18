@@ -22,7 +22,7 @@
           aria-current={if @navigation.id == item.id, do: "page"}>
           <span class={item.icon} aria-hidden="true"></span>
           <span><%= item.label %></span>
-          <span :if={item.id == :api} class="nav-tag">WS</span>
+          <span :if={item.id == :api} class="nav-tag">HTTP/WS</span>
           <span :if={@navigation.id == item.id} class="nav-active-dot"></span>
         </.link>
       </div>

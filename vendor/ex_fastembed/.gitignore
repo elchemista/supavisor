@@ -1,0 +1,19 @@
+/_build
+/cover
+/deps
+/doc
+/.fetch
+erl_crash.dump
+/native/ex_fastembed/target/
+/priv/native
+*.ez
+*.beam
+/.codex/
+/.agents/
+/config/*.secret.exs
+/.elixir*
+.fastembed_cache/
+/config/
+# Rust binary artifacts
+/target/
+/*.tar

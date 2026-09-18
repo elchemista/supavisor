@@ -68,6 +68,12 @@ defmodule Supavisor.Application do
          Supavisor.ClientHandler}
       ] ++ session_shards ++ transaction_shards
 
+    proxy_bind_options =
+      case Application.get_env(:supavisor, :proxy_bind_address) do
+        nil -> []
+        address -> [ip: address]
+      end
+
     ranch_listeners =
       for {key, port, opts, handler} <- proxy_ports do
         :ranch.child_spec(
@@ -80,7 +86,7 @@ defmodule Supavisor.Application do
                 value -> String.to_integer(value)
               end,
             num_acceptors: String.to_integer(System.get_env("NUM_ACCEPTORS") || "100"),
-            socket_opts: [port: port, keepalive: true]
+            socket_opts: [port: port, keepalive: true] ++ proxy_bind_options
           },
           handler,
           opts
@@ -132,8 +138,23 @@ defmodule Supavisor.Application do
         },
         Supavisor.Vault,
         SupavisorWeb.AdminAccessCache,
+        SupavisorWeb.AdminLoginLimiter,
         Supavisor.Monitoring.ConsoleMetrics,
+        {Task.Supervisor, name: Supavisor.ServiceTasks},
+        Supavisor.ServiceAPI.KeyCache,
+        Supavisor.ServiceAPI.RateLimiter,
+        Supavisor.Services.Embeddings,
+        {Supavisor.Services.LocalModels.Worker, :stt},
+        {Supavisor.Services.LocalModels.Worker, :tts},
+        {Supavisor.Services.LocalModels.Worker, :ai_model},
+        Supavisor.Services.Media,
+        Supavisor.Services.Inference,
+        {Oban, Application.fetch_env!(:supavisor, Oban)},
+        Supavisor.Services.MailWorker,
         Supavisor.ServiceAPI.Gateway,
+        {DynamicSupervisor, strategy: :one_for_one, name: Supavisor.InboundSupervisor},
+        Supavisor.Services.InboundServer,
+        Supavisor.Backups.Supervisor,
 
         # Start the Endpoint (http/https)
         SupavisorWeb.Endpoint

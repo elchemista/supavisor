@@ -15,14 +15,14 @@ defmodule SupavisorWeb.CoreComponents do
   attr(:rows, :string, default: nil)
 
   attr(:rest, :global,
-    include: ~w(autocomplete maxlength minlength min max step placeholder spellcheck)
+    include: ~w(autocomplete maxlength minlength min max step placeholder spellcheck disabled)
   )
 
   def input(%{type: "select"} = assigns) do
     ~H"""
     <label class="field">
       <span :if={@label}><%= @label %></span>
-      <select name={@name} {@rest}>
+      <select name={@name} required={@required} {@rest}>
         <option :for={{label, value} <- @options} value={value} selected={to_string(@value || "") == to_string(value)}>
           <%= label %>
         </option>
@@ -36,7 +36,7 @@ defmodule SupavisorWeb.CoreComponents do
     ~H"""
     <label class="field">
       <span :if={@label}><%= @label %></span>
-      <textarea name={@name} rows={@rows} {@rest}><%= @value %></textarea>
+      <textarea name={@name} rows={@rows} required={@required} readonly={@readonly} {@rest}><%= @value %></textarea>
       <.error :for={error <- @errors}><%= error %></.error>
     </label>
     """

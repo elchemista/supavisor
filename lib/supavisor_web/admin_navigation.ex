@@ -33,20 +33,13 @@ defmodule SupavisorWeb.AdminNavigation do
          %{id: :stt, label: "STT", path: "/admin/stt", icon: "hero-microphone"},
          %{id: :tts, label: "TTS", path: "/admin/tts", icon: "hero-speaker-wave"},
          %{id: :ai_model, label: "AI model", path: "/admin/ai-model", icon: "hero-sparkles"}
-       ]},
-      {"Data",
-       [
-         %{
-           id: :imports,
-           label: "Imports",
-           path: "/admin/importazioni",
-           icon: "hero-arrow-down-tray"
-         }
        ]}
     ]
   end
 
   def items, do: Enum.flat_map(groups(), &elem(&1, 1))
+
+  def section("/admin/postgres/backups"), do: section("/admin/postgres")
 
   def section("/admin/provision"), do: section("/admin/postgres")
 

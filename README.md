@@ -2,20 +2,22 @@
 
 # Supavisor - Postgres connection pooler
 
-## Avvio rapido del pannello locale
+## Run the local console
 
-Con PostgreSQL già avviato su questo PC:
+With PostgreSQL already running and Elixir 1.19+ installed:
 
 ```bash
 mix setup
 mix phx.server
 ```
 
-Apri [http://localhost:4000/admin](http://localhost:4000/admin) e premi
-**Accedi in locale**: `admin@localhost` è già compilato.
-PostgreSQL resta sulla porta `5432`; Supavisor usa `6543` (transazioni) e `5452` (sessioni).
+Open [the console](http://localhost:4000/admin) and choose **Sign in locally**
+with `admin@localhost`. PostgreSQL keeps port `5432`; Supavisor uses `6543`
+(transaction pooling) and `5452` (session pooling).
 
-[Guida completa: avvio locale e servizio Linux senza Docker](docs/development/local-admin.md).
+- [Local setup and Linux service deployment](docs/development/local-admin.md)
+- [REST/WebSocket services, local embeddings, mailboxes and webhooks](docs/development/workspace-services.md)
+- [Per-database export, ZIP backups and restore](docs/development/database-backups.md)
 
 [![Coverage Status](https://coveralls.io/repos/github/supabase/supavisor/badge.svg?branch=main)](https://coveralls.io/github/supabase/supavisor?branch=main)
 
@@ -47,7 +49,11 @@ full hosted control plane.
 
 The dashboard supports:
 
-- Passwordless admin login with configured admin emails and magic links.
+- Local sign-in, administrator allowlists, magic links and GitHub OAuth.
+- Scoped REST/WebSocket API keys, live queues and connection monitoring.
+- Local embedding catalog, download and inference with ex_fastembed.
+- Postbeam mailboxes, inbox/outbox, DKIM records and authenticated incoming webhooks.
+- CPU/RAM and model request metrics held in bounded ETS storage.
 - Listing Supavisor tenant connection profiles.
 - Creating, editing, and deleting tenant metadata.
 - Managing stored Supavisor users or auth-query manager users.

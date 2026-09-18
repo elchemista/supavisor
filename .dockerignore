@@ -45,3 +45,14 @@ erl_crash.dump
 /priv/static/cache_manifest.json
 .env
 .env.*
+
+# Local service secrets and model downloads
+/var/
+/.fastembed_cache/
+/priv/stt/
+/priv/tts/
+/priv/ai/
+/vendor/ex_fastembed/_build/
+/vendor/ex_fastembed/deps/
+/vendor/ex_fastembed/priv/native/
+/vendor/ex_fastembed/native/ex_fastembed/target/

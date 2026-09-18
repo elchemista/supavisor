@@ -4,7 +4,7 @@ defmodule SupavisorWeb.Admin.TenantLive do
   alias SupavisorWeb.AdminConnection
 
   alias Supavisor.Tenants
-  alias SupavisorWeb.AdminTenantForm
+  alias SupavisorWeb.{AdminTenantForm, AdminPostgres, AdminProvisioning}
 
   @impl true
   def mount(params, _session, socket) do
@@ -39,7 +39,54 @@ defmodule SupavisorWeb.Admin.TenantLive do
           end
       end
 
-    {:ok, socket}
+    targets =
+      Enum.map(AdminProvisioning.allowed_targets(), fn
+        {host, port} -> {host, port}
+        %{host: host, port: port} -> {host, port}
+      end)
+
+    socket =
+      assign(socket,
+        targets: targets,
+        catalog: nil,
+        catalog_loading: false,
+        catalog_error: nil,
+        catalog_task: nil,
+        suggested_name: nil,
+        suggested_user: nil
+      )
+
+    if socket.assigns[:params] do
+      index =
+        Enum.find_index(targets, fn {host, port} ->
+          host == socket.assigns.params["db_host"] and
+            to_string(port) == socket.assigns.params["db_port"]
+        end)
+
+      selected =
+        cond do
+          index != nil ->
+            to_string(index)
+
+          socket.assigns.live_action == :new and not Map.has_key?(params, "db_host") and
+              targets != [] ->
+            "0"
+
+          true ->
+            "manual"
+        end
+
+      socket = assign(socket, selected_server: selected)
+
+      socket =
+        if socket.assigns.live_action == :new,
+          do: update(socket, :params, &Map.put(&1, "db_database", params["db_database"] || "")),
+          else: socket
+
+      {:ok, socket |> set_server_address() |> load_catalog()}
+    else
+      {:ok, assign(socket, selected_server: "manual")}
+    end
   end
 
   @impl true
@@ -51,7 +98,10 @@ defmodule SupavisorWeb.Admin.TenantLive do
     {:noreply, update(socket, :params, &AdminTenantForm.remove_user(&1, index))}
   end
 
-  def handle_event("validate", %{"tenant" => params}, socket) do
+  def handle_event("validate", %{"tenant" => params} = event, socket) do
+    previous = socket.assigns.params
+    params = Map.put_new(params, "db_database", previous["db_database"])
+
     params =
       if socket.assigns.live_action == :edit do
         Map.put(params, "external_id", socket.assigns.tenant.external_id)
@@ -59,7 +109,24 @@ defmodule SupavisorWeb.Admin.TenantLive do
         params
       end
 
-    {:noreply, assign(socket, params: AdminTenantForm.normalize_params(params))}
+    socket = assign(socket, params: AdminTenantForm.normalize_params(params))
+
+    socket =
+      case event["_target"] do
+        ["connection_server"] -> select_server(socket, event["connection_server"])
+        ["tenant", "db_database"] -> suggest_database(socket)
+        ["tenant", "users", index, "db_user"] -> sync_user_alias(socket, previous, index)
+        _ -> socket
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_event("refresh-catalog", _params, socket), do: {:noreply, load_catalog(socket, true)}
+
+  def handle_event("recover", %{"tenant" => _} = event, socket) do
+    {:noreply, socket} = handle_event("validate", Map.put(event, "_target", []), socket)
+    {:noreply, select_server(socket, event["connection_server"] || "manual", false)}
   end
 
   def handle_event("save", %{"tenant" => params}, socket) do
@@ -70,13 +137,211 @@ defmodule SupavisorWeb.Admin.TenantLive do
         params
       end
 
-    case AdminTenantForm.to_attrs(params, socket.assigns.tenant) do
-      {:ok, attrs} ->
-        save_tenant(socket, attrs)
-
+    with {:ok, params} <- selected_database_params(params, socket),
+         {:ok, attrs} <- AdminTenantForm.to_attrs(params, socket.assigns.tenant) do
+      save_tenant(socket, attrs)
+    else
       {:error, errors, params} ->
         {:noreply, assign(socket, params: params, errors: errors)}
     end
+  end
+
+  @impl true
+  def handle_async({:tenant_catalog, _} = task, result, socket) do
+    if task == socket.assigns.catalog_task do
+      socket =
+        case result do
+          {:ok, {:ok, catalog}} ->
+            socket
+            |> assign(catalog: catalog, catalog_loading: false, catalog_error: nil, catalog_task: nil)
+            |> suggest_database()
+
+          _ ->
+            assign(socket,
+              catalog_loading: false,
+              catalog_task: nil,
+              catalog_error:
+                if(socket.assigns.catalog,
+                  do: "Could not refresh the list. Your previous selection is still available. Try again.",
+                  else: "Could not load databases. Try again, or select Enter connection manually."
+                )
+            )
+        end
+
+      {:noreply, socket}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  defp server(socket) do
+    case Integer.parse(socket.assigns.selected_server) do
+      {index, ""} when index >= 0 -> Enum.at(socket.assigns.targets, index)
+      _ -> nil
+    end
+  end
+
+  defp set_server_address(socket) do
+    case server(socket) do
+      {host, port} ->
+        update(
+          socket,
+          :params,
+          &Map.merge(&1, %{"db_host" => host, "db_port" => to_string(port)})
+        )
+
+      nil ->
+        socket
+    end
+  end
+
+  defp select_server(socket, selected, reset_database \\ true) do
+    valid =
+      selected == "manual" or
+        selected in Enum.map(Enum.with_index(socket.assigns.targets), fn {_, i} ->
+          to_string(i)
+        end)
+
+    if valid and selected != socket.assigns.selected_server do
+      socket = assign(socket, selected_server: selected, catalog: nil, catalog_error: nil)
+
+      socket =
+        if selected == "manual" or not reset_database,
+          do: socket,
+          else: update(socket, :params, &Map.put(&1, "db_database", ""))
+
+      socket |> set_server_address() |> load_catalog()
+    else
+      socket
+    end
+  end
+
+  defp load_catalog(socket, refresh \\ false) do
+    socket =
+      if socket.assigns.catalog_task,
+        do: cancel_async(socket, socket.assigns.catalog_task),
+        else: socket
+
+    case {server(socket), connected?(socket)} do
+      {{host, port}, true} ->
+        task = {:tenant_catalog, make_ref()}
+
+        socket
+        |> assign(catalog_task: task, catalog_loading: true, catalog_error: nil)
+        |> start_async(task, fn -> AdminPostgres.connection_catalog(host, port, refresh) end)
+
+      _ ->
+        assign(socket, catalog_task: nil, catalog_loading: false)
+    end
+  end
+
+  defp suggest_database(%{assigns: %{catalog: nil}} = socket), do: socket
+  defp suggest_database(%{assigns: %{live_action: :edit}} = socket), do: socket
+
+  defp suggest_database(socket) do
+    database =
+      Enum.find(
+        socket.assigns.catalog.databases,
+        &(&1.name == socket.assigns.params["db_database"])
+      )
+
+    if database do
+      suggested_name = database.name |> String.downcase() |> String.replace(~r/[^a-z0-9_-]/u, "_")
+      name = socket.assigns.params["external_id"]
+
+      params =
+        if name in [nil, "", socket.assigns.suggested_name],
+          do: Map.put(socket.assigns.params, "external_id", suggested_name),
+          else: socket.assigns.params
+
+      {index, user} = List.first(sorted_users(params)) || {nil, nil}
+      owner = if database.owner in socket.assigns.catalog.roles, do: database.owner, else: ""
+
+      params =
+        if user && user["db_user"] in [nil, "", socket.assigns.suggested_user] do
+          password = if user["db_user"] == owner, do: user["db_password"], else: ""
+
+          alias_name =
+            if user["db_user_alias"] in [nil, "", user["db_user"]],
+              do: owner,
+              else: user["db_user_alias"]
+
+          put_in(
+            params,
+            ["users", index],
+            Map.merge(user, %{
+              "db_user" => owner,
+              "db_user_alias" => alias_name,
+              "db_password" => password
+            })
+          )
+        else
+          params
+        end
+
+      assign(socket, params: params, suggested_name: suggested_name, suggested_user: owner)
+    else
+      socket
+    end
+  end
+
+  defp sync_user_alias(socket, previous, index) do
+    current = get_in(socket.assigns.params, ["users", index])
+    old = get_in(previous, ["users", index]) || %{}
+
+    if current && current["db_user"] != old["db_user"] do
+      user = Map.put(current, "db_password", "")
+
+      user =
+        if current["db_user_alias"] in [nil, "", old["db_user"]],
+          do: Map.put(user, "db_user_alias", current["db_user"]),
+          else: user
+
+      update(socket, :params, &put_in(&1, ["users", index], user))
+    else
+      socket
+    end
+  end
+
+  defp selected_database_params(params, %{assigns: %{selected_server: "manual"}}),
+    do: {:ok, params}
+
+  defp selected_database_params(params, socket) do
+    catalog = socket.assigns.catalog
+
+    cond do
+      socket.assigns.catalog_loading or is_nil(catalog) ->
+        {:error, %{base: ["Wait for the database list, or enter the connection manually."]},
+         params}
+
+      not Enum.any?(catalog.databases, &(&1.name == params["db_database"])) ->
+        {:error, %{"db_database" => ["Select an existing database from the list."]}, params}
+
+      true ->
+        {host, port} = server(socket)
+        {:ok, Map.merge(params, %{"db_host" => host, "db_port" => to_string(port)})}
+    end
+  end
+
+  defp database_options(nil, current), do: keep_selected_option([], current, "database")
+
+  defp database_options(catalog, current) do
+    options = Enum.map(catalog.databases, &{"#{&1.name} · #{&1.owner}", &1.name})
+    keep_selected_option(options, current, "database")
+  end
+
+  defp role_options(catalog, current) do
+    keep_selected_option(Enum.map(catalog.roles, &{&1, &1}), current, "role")
+  end
+
+  defp keep_selected_option(options, current, kind) do
+    options =
+      if current not in [nil, ""] and
+           not Enum.any?(options, fn {_, value} -> value == current end),
+         do: [{"#{current} (current #{kind})", current} | options],
+         else: options
+
+    [{"Select #{kind}…", ""} | options]
   end
 
   defp save_tenant(%{assigns: %{live_action: :new}} = socket, attrs) do
@@ -119,6 +384,13 @@ defmodule SupavisorWeb.Admin.TenantLive do
 
   defp session_port do
     Application.get_env(:supavisor, :proxy_port_session, 5432)
+  end
+
+  defp private_pool? do
+    Application.get_env(:supavisor, :proxy_bind_address) in [
+      {127, 0, 0, 1},
+      {0, 0, 0, 0, 0, 0, 0, 1}
+    ]
   end
 
   defp connection_name(params), do: fallback(params["external_id"], "my_app")
@@ -175,7 +447,11 @@ defmodule SupavisorWeb.Admin.TenantLive do
         <p class="eyebrow">Connection</p>
         <h1><%= @page_title %></h1>
         <p class="page-subtitle">
-          This creates or edits a Supavisor connection profile. It does not list or create every database in Postgres.
+          <%= if @tenant do %>
+            Update this connection profile. Leave an existing user's password blank to keep it.
+          <% else %>
+            Select a database, choose its login role, and add the password to create a connection profile.
+          <% end %>
         </p>
       </div>
       <.link class="secondary-button" navigate={~p"/admin"}>
@@ -189,21 +465,112 @@ defmodule SupavisorWeb.Admin.TenantLive do
     <.stepper
       current={1}
       steps={[
+        "Database",
         "Connection",
-        "Postgres",
         "Auth",
         "Clients",
         "Users"
       ]}
     />
 
-    <form id="tenant-form" class="tenant-form" phx-change="validate" phx-submit="save">
+    <form id="tenant-form" class="tenant-form" phx-change="validate" phx-auto-recover="recover" phx-submit="save">
       <section class="form-section form-section-primary">
         <div class="form-section-heading">
           <span class="step-marker">1</span>
           <div>
+            <h2>Choose an existing database</h2>
+            <p>
+              <%= if @tenant do %>
+                Review the server and database. Refreshing the list keeps your current settings.
+              <% else %>
+                Select your server and database. Connection details and the owner role are filled in for you.
+              <% end %>
+            </p>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <.input
+            type="select"
+            label="PostgreSQL server"
+            name="connection_server"
+            value={@selected_server}
+            options={Enum.map(Enum.with_index(@targets), fn {{host, port}, index} -> {"#{host}:#{port}", to_string(index)} end) ++ [{"Enter connection manually", "manual"}]}
+          />
+          <.input
+            :if={@selected_server != "manual"}
+            type="select"
+            label="Database"
+            name="tenant[db_database]"
+            value={@params["db_database"]}
+            options={database_options(@catalog, @params["db_database"])}
+            disabled={@catalog_loading or is_nil(@catalog)}
+            required
+            errors={error(@errors, "db_database")}
+          />
+        </div>
+        <div :if={@selected_server != "manual"} class="database-picker-status">
+          <span role="status" aria-live="polite">
+            <%= cond do %>
+              <% @catalog_loading -> %>Loading databases and login roles…
+              <% @catalog -> %>{length(@catalog.databases)} databases · {length(@catalog.roles)} login roles
+              <% true -> %>Database list unavailable
+            <% end %>
+          </span>
+          <button
+            id="refresh-database-catalog"
+            type="button"
+            class="secondary-button database-refresh-button"
+            phx-click="refresh-catalog"
+            disabled={@catalog_loading}
+            aria-busy={to_string(@catalog_loading)}
+          >
+            <span class={["hero-arrow-path", @catalog_loading && "is-spinning"]} aria-hidden="true"></span>
+            <span>{cond do
+              @catalog_loading -> "Refreshing…"
+              @catalog_error -> "Try again"
+              true -> "Refresh list"
+            end}</span>
+          </button>
+        </div>
+        <p :if={@catalog_error} class="notice notice-error" role="alert">{@catalog_error}</p>
+        <div class="form-grid">
+          <.input
+            label="Postgres host"
+            name="tenant[db_host]"
+            value={@params["db_host"]}
+            placeholder="localhost"
+            readonly={@selected_server != "manual"}
+            required
+            errors={error(@errors, "db_host")}
+          />
+          <.input
+            label="Postgres port"
+            name="tenant[db_port]"
+            type="number"
+            value={@params["db_port"]}
+            readonly={@selected_server != "manual"}
+            required
+            errors={error(@errors, "db_port")}
+          />
+          <.input
+            :if={@selected_server == "manual"}
+            label="Existing database name"
+            name="tenant[db_database]"
+            value={@params["db_database"]}
+            placeholder="my_app_db"
+            required
+            errors={error(@errors, "db_database")}
+          />
+        </div>
+      </section>
+
+      <section class="form-section">
+        <div class="form-section-heading">
+          <span class="step-marker">2</span>
+          <div>
             <h2>Supavisor connection name</h2>
-            <p>This is the name clients include after the dot in the username.</p>
+            <p>Suggested from the database name. You can change it before saving.</p>
           </div>
         </div>
 
@@ -216,43 +583,6 @@ defmodule SupavisorWeb.Admin.TenantLive do
             readonly={@live_action == :edit}
             required
             errors={error(@errors, "external_id")}
-          />
-        </div>
-      </section>
-
-      <section class="form-section">
-        <div class="form-section-heading">
-          <span class="step-marker">2</span>
-          <div>
-            <h2>Existing Postgres database</h2>
-            <p>Where Supavisor connects after a client authenticates. This form does not create this database.</p>
-          </div>
-        </div>
-
-        <div class="form-grid">
-          <.input
-            label="Postgres host"
-            name="tenant[db_host]"
-            value={@params["db_host"]}
-            placeholder="localhost"
-            required
-            errors={error(@errors, "db_host")}
-          />
-          <.input
-            label="Postgres port"
-            name="tenant[db_port]"
-            type="number"
-            value={@params["db_port"]}
-            required
-            errors={error(@errors, "db_port")}
-          />
-          <.input
-            label="Existing database name"
-            name="tenant[db_database]"
-            value={@params["db_database"]}
-            placeholder="my_app_db"
-            required
-            errors={error(@errors, "db_database")}
           />
         </div>
       </section>
@@ -318,6 +648,11 @@ defmodule SupavisorWeb.Admin.TenantLive do
           </div>
         </div>
 
+        <p :if={private_pool?()} class="field-help">
+          This pool is private on this server. Remote applications need an SSH tunnel or a private network connection.
+          Creating a tenant does not change your applications' current database connections.
+        </p>
+
         <div class="connection-recipe">
           <div>
             <span>Supavisor host</span>
@@ -363,7 +698,7 @@ defmodule SupavisorWeb.Admin.TenantLive do
             <div>
               <h2><%= if @params["auth_mode"] == "auth_query", do: "Manager user for auth query", else: "Database users clients may use" %></h2>
               <p :if={@params["auth_mode"] == "stored_users"}>
-                Each row is a Postgres user that clients can log in as. Password fields are write-only.
+                Select a login role and enter its password. PostgreSQL does not return existing passwords.
               </p>
               <p :if={@params["auth_mode"] == "auth_query"}>
                 This user is used by Supavisor to run the auth query; it is not the only client login.
@@ -384,6 +719,15 @@ defmodule SupavisorWeb.Admin.TenantLive do
               <span><%= if user["id"] in [nil, ""], do: "new", else: "existing" %></span>
             </div>
             <.input
+              :if={@catalog && @selected_server != "manual"}
+              type="select"
+              label="PostgreSQL login role"
+              name={"tenant[users][#{index}][db_user]"}
+              value={user["db_user"]}
+              options={role_options(@catalog, user["db_user"])}
+            />
+            <.input
+              :if={is_nil(@catalog) or @selected_server == "manual"}
               label="Real Postgres username"
               name={"tenant[users][#{index}][db_user]"}
               value={user["db_user"]}

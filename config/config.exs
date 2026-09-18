@@ -7,6 +7,9 @@
 # General application configuration
 import Config
 
+# LiveView file filters need MIME mappings for PostgreSQL custom archives.
+config :mime, :types, %{"application/x-postgresql-custom" => ["dump", "backup"]}
+
 config :supavisor,
   ecto_repos: [Supavisor.Repo],
   version: Mix.Project.config()[:version],
@@ -16,6 +19,9 @@ config :supavisor,
   subscribe_retries: System.get_env("SUBSCRIBE_RETRIES", "20") |> String.to_integer()
 
 config :prom_ex, storage_adapter: Supavisor.Monitoring.PromEx.Store
+
+# Enabled in development or explicitly with LOCAL_ONNX_ENABLED; no model loads at startup.
+config :supavisor, Supavisor.Services.LocalModels, enabled: false
 
 # Configures the endpoint
 config :supavisor, SupavisorWeb.Endpoint,
@@ -41,11 +47,17 @@ config :supavisor, Supavisor.Mailer, adapter: Swoosh.Adapters.Local
 
 config :swoosh, :api_client, false
 
+config :phoenix_cap,
+  json_library: JSON,
+  token_module: Phoenix.Token,
+  token_context: SupavisorWeb.Endpoint,
+  token_salt: "supavisor-admin-cap-v1"
+
 config :esbuild,
   version: "0.25.4",
   supavisor: [
     args:
-      ~w(js/app.js --bundle --target=es2017 --outdir=../priv/static/assets --external:/fonts/* --external:/images/*),
+      ~w(js/app.js js/login.js js/cap-inflate.js --bundle --target=es2017 --outdir=../priv/static/assets --public-path=/assets --loader:.wasm=file --external:/fonts/* --external:/images/*),
     cd: Path.expand("../assets", __DIR__),
     env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
   ]
@@ -109,4 +121,24 @@ config :libcluster,
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"
 
-config :phoenix, :filter_parameters, ["password", "secret", "token", "code", "state"]
+config :phoenix, :filter_parameters, [
+  "password",
+  "secret",
+  "token",
+  "code",
+  "state",
+  "text",
+  "html",
+  "input",
+  "email"
+]
+
+# Only housekeeping jobs are persisted. Model requests/results remain in ETS.
+config :supavisor, Oban,
+  repo: Supavisor.Repo,
+  prefix: "_supavisor",
+  queues: [maintenance: 1],
+  plugins: [
+    {Oban.Pruner, max_age: 86_400},
+    {Oban.Cron, crontab: [{"17 * * * *", Supavisor.Services.MediaCleanup}]}
+  ]

@@ -129,14 +129,40 @@ defmodule SupavisorWeb.Admin.MetricsLive do
     <div :if={@metrics} class="metrics-workspace">
       <div class="metrics-status-line"><span class={["status-badge", @paused && "pending"]}><i class="status-dot"></i><%= if @paused, do: "Paused", else: "Live · every 5 seconds" %></span><span>Updated <%= clock(@metrics.time) %> UTC <span class="metrics-status-divider">/</span> This server</span></div>
       <div class="stats-grid metrics-stats">
-        <article class="stat-card"><div class="stat-head"><span class="stat-icon"><span class="hero-cube"></span></span><span class="stat-label">Supavisor RAM</span></div><div class="stat-value"><%= bytes(@metrics.app_rss) %></div><div class="stat-hint"><%= percentage(@metrics.app_memory_percent) %> of <%= bytes(@metrics.total_memory) %> server RAM</div><div class="metric-meter"><span style={meter(@metrics.app_memory_percent)}></span></div></article>
-        <article class="stat-card"><div class="stat-head"><span class="stat-icon"><span class="hero-server-stack"></span></span><span class="stat-label">Server RAM</span></div><div class="stat-value"><%= bytes(@metrics.used_memory) %></div><div class="stat-hint"><%= bytes(@metrics.available_memory) %> available · <%= percentage(@metrics.server_memory_percent) %> used</div><div class="metric-meter server"><span style={meter(@metrics.server_memory_percent)}></span></div></article>
+        <article class="stat-card">
+          <div class="stat-head">
+            <span class="stat-icon"><span class="hero-server-stack"></span></span>
+            <span class="stat-label">Server RAM used</span>
+          </div>
+          <div class="stat-value metric-value-with-total">
+            <span>{bytes(@metrics.used_memory)}</span>
+            <span class="metric-capacity">/ {bytes(@metrics.total_memory)} total</span>
+          </div>
+          <div class="stat-hint">
+            {percentage(@metrics.server_memory_percent)} used · {bytes(@metrics.available_memory)} available
+          </div>
+          <p class="metric-scope">Entire server, including Supavisor</p>
+          <div class="metric-meter server"><span style={meter(@metrics.server_memory_percent)}></span></div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-head">
+            <span class="stat-icon"><span class="hero-cube"></span></span>
+            <span class="stat-label">Supavisor RAM used</span>
+          </div>
+          <div class="stat-value metric-value-with-total">
+            <span>{bytes(@metrics.app_rss)}</span>
+            <span class="metric-capacity">/ {bytes(@metrics.total_memory)} server</span>
+          </div>
+          <div class="stat-hint">{percentage(@metrics.app_memory_percent)} of total server RAM</div>
+          <p class="metric-scope">Application process · included in server usage</p>
+          <div class="metric-meter"><span style={meter(@metrics.app_memory_percent)}></span></div>
+        </article>
+        <article class="stat-card"><div class="stat-head"><span class="stat-icon"><span class="hero-chart-bar"></span></span><span class="stat-label">Server CPU</span></div><div class="stat-value"><%= percentage(@metrics.server_cpu) %></div><div class="stat-hint"><%= @metrics.cpu_count || "—" %> logical CPUs · includes Supavisor</div><div class="metric-meter server"><span style={meter(@metrics.server_cpu)}></span></div></article>
         <article class="stat-card"><div class="stat-head"><span class="stat-icon"><span class="hero-cpu-chip"></span></span><span class="stat-label">Supavisor CPU</span></div><div class="stat-value"><%= percentage(@metrics.app_cpu) %></div><div class="stat-hint">Share of total server CPU capacity</div><div class="metric-meter"><span style={meter(@metrics.app_cpu)}></span></div></article>
-        <article class="stat-card"><div class="stat-head"><span class="stat-icon"><span class="hero-chart-bar"></span></span><span class="stat-label">Server CPU</span></div><div class="stat-value"><%= percentage(@metrics.server_cpu) %></div><div class="stat-hint"><%= @metrics.cpu_count || "—" %> logical CPUs · all processes</div><div class="metric-meter server"><span style={meter(@metrics.server_cpu)}></span></div></article>
       </div>
       <div class="metrics-charts-grid">
-        <section class="data-panel metrics-chart-panel"><div class="metrics-panel-heading"><div><h2>CPU activity</h2><p>Percentage of total server capacity</p></div><span class="metrics-window">10 MIN</span></div><div class="chart-legend"><span><i class="app"></i>Supavisor</span><span><i class="server"></i>Server</span></div><.history_chart chart={@cpu_chart} title="Supavisor and server CPU usage over the last 10 minutes, from 0 to 100 percent" /></section>
-        <section class="data-panel metrics-chart-panel"><div class="metrics-panel-heading"><div><h2>Memory usage</h2><p>Percentage of physical server RAM</p></div><span class="metrics-window">10 MIN</span></div><div class="chart-legend"><span><i class="app"></i>Supavisor</span><span><i class="server"></i>Server</span></div><.history_chart chart={@memory_chart} title="Supavisor and server memory usage over the last 10 minutes, from 0 to 100 percent" /></section>
+        <section class="data-panel metrics-chart-panel"><div class="metrics-panel-heading"><div><h2>CPU activity</h2><p>Percentage of total server capacity</p></div><span class="metrics-window">10 MIN</span></div><div class="chart-legend"><span><i class="server"></i>Entire server</span><span><i class="app"></i>Supavisor</span></div><.history_chart chart={@cpu_chart} title="Supavisor and server CPU usage over the last 10 minutes, from 0 to 100 percent" /></section>
+        <section class="data-panel metrics-chart-panel"><div class="metrics-panel-heading"><div><h2>Memory usage</h2><p>Percentage of physical server RAM</p></div><span class="metrics-window">10 MIN</span></div><div class="chart-legend"><span><i class="server"></i>Entire server</span><span><i class="app"></i>Supavisor</span></div><.history_chart chart={@memory_chart} title="Supavisor and server memory usage over the last 10 minutes, from 0 to 100 percent" /></section>
       </div>
       <section class="data-panel metrics-models">
         <div class="metrics-panel-heading"><div><div class="section-kicker">MODEL TRAFFIC</div><h2>Every request, accounted for.</h2><p>Completed requests, including failures, since the collector started.</p></div><span class="metrics-total"><strong><%= @metrics.completed %></strong> processed</span></div>
@@ -144,7 +170,7 @@ defmodule SupavisorWeb.Admin.MetricsLive do
         <div class="table-scroll"><table class="responsive-table metrics-model-table"><thead><tr><th>Service</th><th>Completed</th><th>Errors</th><th>In progress</th><th>Avg. duration</th></tr></thead><tbody id="model-metrics" phx-update="stream"><tr :for={{id, model} <- @streams.models} id={id}><td class="name-cell"><span class="resource-icon"><span class={model.icon}></span></span><div><strong><%= model.label %></strong><small :if={model.completed == 0 and model.in_flight == 0} class="table-secondary">Awaiting requests</small></div></td><td data-label="Completed" class="mono"><%= model.completed %></td><td data-label="Errors" class={["mono", model.errors > 0 && "metric-error"]}><%= model.errors %></td><td data-label="In progress" class="mono"><%= model.in_flight %></td><td data-label="Avg. duration" class="mono muted"><%= duration(model.average_ms) %></td></tr></tbody></table></div>
         <p :if={@metrics.completed == 0 and @metrics.in_flight == 0} class="metrics-empty-note"><span class="hero-information-circle"></span>No model traffic yet. Model providers still need to be connected; counters will populate when instrumented requests run.</p>
       </section>
-      <div class="metrics-footnotes"><div><span class="hero-bolt"></span><p><strong>Light by design.</strong> One shared sampler, 120 readings in memory and four service counters. No metric writes to PostgreSQL.</p></div><div><span class="hero-information-circle"></span><p>RAM is the Supavisor process’s resident memory. CPU is averaged across all server CPUs. History and totals reset when the collector restarts; unavailable readings show “—”.</p></div></div>
+      <div class="metrics-footnotes"><div><span class="hero-bolt"></span><p><strong>Light by design.</strong> One shared sampler, 120 readings in memory and four service counters. No metric writes to PostgreSQL.</p></div><div><span class="hero-information-circle"></span><p>Server RAM used is total RAM minus available RAM. Supavisor RAM is its process’s resident memory. Server figures already include Supavisor; do not add the two readings. CPU is averaged across all server CPUs. History and totals reset when the collector restarts; unavailable readings show “—”.</p></div></div>
     </div>
     """
   end

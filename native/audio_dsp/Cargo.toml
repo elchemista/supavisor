@@ -1,0 +1,9 @@
+[package]
+name = "audio_dsp"
+version = "0.1.0"
+edition = "2021"
+[lib]
+crate-type = ["cdylib"]
+[dependencies]
+rustler = "0.38.0"
+rustfft = "6.4.1"

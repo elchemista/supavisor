@@ -77,7 +77,7 @@ defmodule SupavisorWeb.AdminTenantForm do
 
   def to_attrs(params, existing \\ nil) do
     params = normalize_params(params)
-    errors = collect_errors(params)
+    errors = collect_errors(params) |> validate_user_credentials(params, existing)
 
     if errors == %{} do
       {:ok, build_attrs(params, existing)}
@@ -95,6 +95,29 @@ defmodule SupavisorWeb.AdminTenantForm do
       end)
 
     %{base: ["Could not save tenant: #{inspect(errors)}"]}
+  end
+
+  defp validate_user_credentials(errors, params, existing) do
+    saved =
+      case existing do
+        %Tenant{users: users} -> Map.new(users, &{&1.id, &1})
+        _ -> %{}
+      end
+
+    Enum.reduce(normalized_user_rows(params), errors, fn user, errors ->
+      previous = Map.get(saved, user["id"])
+
+      cond do
+        not blank?(user["id"]) and is_nil(previous) ->
+          add_error(errors, :base, "That user row no longer exists. Reload this page.")
+
+        blank?(user["db_password"]) and (is_nil(previous) or previous.db_user != user["db_user"]) ->
+          add_error(errors, :base, "Enter the password for the selected PostgreSQL login role.")
+
+        true ->
+          errors
+      end
+    end)
   end
 
   defp default_user_params do

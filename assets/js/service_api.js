@@ -1,7 +1,7 @@
 export const ServiceAPI = {
   mounted() {
     this.handleEvent("clear-api-token", () => {
-      const field = this.el.querySelector('input[name="api_token"]')
+      const field = this.el.querySelector('input[name="key[token]"]')
       if (field) field.value = ""
     })
     this.copy = async event => {
@@ -12,11 +12,11 @@ export const ServiceAPI = {
       if (!field) return
       try {
         await navigator.clipboard.writeText(field.value || field.textContent.trim())
-        feedback.textContent = "Copied to clipboard."
+        if (feedback) feedback.textContent = "Copied to clipboard."
       } catch {
         field.focus()
         if (field.select) field.select()
-        feedback.textContent = "Select and copy the value manually."
+        if (feedback) feedback.textContent = "Select and copy the value manually."
       }
     }
     this.el.addEventListener("click", this.copy)

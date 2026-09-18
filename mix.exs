@@ -5,8 +5,9 @@ defmodule Supavisor.MixProject do
     [
       app: :supavisor,
       version: version(),
-      elixir: "~> 1.18",
+      elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),
+      compilers: [:service_runner] ++ Mix.compilers(),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
@@ -55,7 +56,15 @@ defmodule Supavisor.MixProject do
       {:phoenix_view, "~> 2.0.2"},
       {:phoenix_live_view, "~> 1.0"},
       {:phoenix_live_dashboard, "~> 0.7"},
-      {:swoosh, "~> 1.25"},
+      {:phoenix_cap,
+       github: "elchemista/phoenix_cap", ref: "12374467283a9f6a838a9e557fc5317702d85717"},
+      {:swoosh, "~> 1.28"},
+      {:postbeam, github: "elchemista/postbeam", ref: "e7ec13acc9174310f315ddbdaa3d40ee77c909cf"},
+      {:ex_fastembed, path: "vendor/ex_fastembed", env: :prod},
+      {:onnxruntime, "== 0.1.0-rc.1"},
+      {:nx, "~> 0.12.0"},
+      {:tokenizers, "~> 0.5.1"},
+      {:oban, "~> 2.24.1"},
       {:gen_smtp, "~> 1.0"},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:tailwind, "~> 0.4", runtime: Mix.env() == :dev},
@@ -86,7 +95,7 @@ defmodule Supavisor.MixProject do
       {:poolboy, git: "https://github.com/supabase/poolboy", tag: "v0.0.3"},
       {:syn, "~> 3.3"},
       {:pgo, "~> 0.13"},
-      {:rustler, "~> 0.36.1"},
+      {:rustler, "~> 0.38.0"},
       {:ranch, "~> 2.0", override: true},
 
       # Linting
@@ -192,4 +201,36 @@ defmodule Supavisor.MixProject do
   end
 
   defp version, do: File.read!("./VERSION") |> String.trim()
+end
+
+defmodule Mix.Tasks.Compile.ServiceRunner do
+  use Mix.Task.Compiler
+  @shortdoc "Build the native PostgreSQL backup worker"
+  def run(_) do
+    cargo =
+      System.find_executable("cargo") ||
+        Mix.raise("Rust/Cargo is required to build the backup worker.")
+
+    case System.cmd(
+           cargo,
+           [
+             "build",
+             "--release",
+             "--locked",
+             "--manifest-path",
+             "native/service_runner/Cargo.toml"
+           ],
+           stderr_to_stdout: true
+         ) do
+      {_, 0} ->
+        target = Path.join([File.cwd!(), "priv", "native", "service_runner"])
+        File.mkdir_p!(Path.dirname(target))
+        File.cp!("native/target/release/service_runner", target)
+        File.chmod!(target, 0o755)
+        {:ok, []}
+
+      {output, _} ->
+        Mix.raise("Native backup worker build failed:\n" <> output)
+    end
+  end
 end

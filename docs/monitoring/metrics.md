@@ -52,3 +52,16 @@ drill down to metrics per tenant:
 - Number of connected clients
 - Query duration and query counts
 - Network usage for client sockets and database sockets
+
+## Admin resource dashboard
+
+`/admin/metrics` shows the entire server first, followed by the Supavisor process.
+**Server RAM used** is physical memory minus available memory (`MemTotal -
+MemAvailable` on Linux). **Supavisor RAM used** is the process's resident memory
+(`VmRSS`). Both cards display the server's physical capacity as the denominator;
+this is not a separate memory allocation or service limit. Available RAM includes
+memory the operating system can reclaim from caches.
+
+Server totals cover Supavisor too: do not add the app's usage to the server's.
+The shared collector reads system counters every five seconds, keeps ten minutes
+of history in ETS and does not write these readings to PostgreSQL.

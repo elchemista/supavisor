@@ -19,6 +19,13 @@ defmodule SupavisorWeb.AdminAccessCache do
     end
   end
 
+  def credential_versions do
+    case cached_versions() do
+      {:ok, versions} -> versions
+      :miss -> GenServer.call(__MODULE__, :refresh_versions)
+    end
+  end
+
   def invalidate do
     if pid = Process.whereis(__MODULE__) do
       :ok = GenServer.call(__MODULE__, :invalidate)
@@ -56,12 +63,20 @@ defmodule SupavisorWeb.AdminAccessCache do
 
   def handle_call(:invalidate, _from, state) do
     :ets.delete(@table, :emails)
+    :ets.delete(@table, :credential_versions)
     {:reply, :ok, state}
+  end
+
+  def handle_call(:refresh_versions, _from, state) do
+    versions = SupavisorWeb.AdminCredential.versions()
+    :ets.insert(@table, {:credential_versions, now() + @ttl, versions})
+    {:reply, versions, state}
   end
 
   @impl true
   def handle_info(:invalidate_admin_access, state) do
     :ets.delete(@table, :emails)
+    :ets.delete(@table, :credential_versions)
     {:noreply, state}
   end
 
@@ -75,4 +90,13 @@ defmodule SupavisorWeb.AdminAccessCache do
   end
 
   defp now, do: System.monotonic_time(:millisecond)
+
+  defp cached_versions do
+    case :ets.lookup(@table, :credential_versions) do
+      [{_, expires, versions}] -> if expires > now(), do: {:ok, versions}, else: :miss
+      [] -> :miss
+    end
+  rescue
+    ArgumentError -> :miss
+  end
 end

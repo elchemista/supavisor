@@ -11,6 +11,7 @@ defmodule SupavisorWeb.AdminAuth do
   @magic_link_salt "admin magic link"
   @session_email_key "admin_email"
   @session_authenticated_at_key "admin_authenticated_at"
+  @session_version_key "admin_session_version"
 
   def init(action), do: action
 
@@ -80,11 +81,17 @@ defmodule SupavisorWeb.AdminAuth do
     end
   end
 
-  def log_in_admin(conn, email) do
+  def log_in_admin(conn, email, version \\ :current) do
+    version =
+      if version == :current,
+        do: SupavisorWeb.AdminCredential.session_version(email),
+        else: version
+
     conn
     |> configure_session(renew: true)
     |> put_session(@session_email_key, normalize_email(email))
     |> put_session(@session_authenticated_at_key, now_seconds())
+    |> put_session(@session_version_key, version)
   end
 
   def log_out_admin(conn) do
@@ -108,6 +115,9 @@ defmodule SupavisorWeb.AdminAuth do
         error
     end
   end
+
+  def email_sign_in_enabled?,
+    do: Application.get_env(:supavisor, :admin_email_login_enabled, false)
 
   @doc "Create a one-time link for an allowed admin, also usable from a release RPC console."
   def create_magic_link(email) do
@@ -182,6 +192,9 @@ defmodule SupavisorWeb.AdminAuth do
          authenticated_at when is_integer(authenticated_at) <-
            session[@session_authenticated_at_key],
          true <- admin_email?(email),
+         true <-
+           Map.get(session, @session_version_key) ==
+             SupavisorWeb.AdminCredential.session_version(email),
          true <- now_seconds() - authenticated_at <= session_ttl_seconds() do
       {:ok, email}
     else

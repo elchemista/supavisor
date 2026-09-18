@@ -14,8 +14,9 @@ mix phx.server
 ```
 
 Apri [il pannello](http://localhost:4000/admin). L’email `admin@localhost` è già
-compilata: premi **Sign in locally**. In sviluppo, dal PC locale e con il mailer
-locale, l’accesso è diretto. La release di produzione usa i link monouso.
+compilata: seleziona **I'm not a robot** e premi **Sign in locally**. In sviluppo, dal PC locale e con il mailer
+locale, l’accesso è diretto. La release di produzione usa email e password; un
+link monouso generato dal server permette di impostare la prima password.
 
 `mix setup` installa le dipendenze, crea il database se manca, esegue le
 migrazioni e compila CSS/JavaScript. Non carica i seed dei test e non ricrea
@@ -42,6 +43,9 @@ Per `ADMIN_POSTGRES_PASSWORD` usa invece la password originale.
 
 - **PostgreSQL**: vedere database, proprietari, dimensioni, numero di connessioni
   e ruoli; aggiornare l'elenco con **Refresh**.
+- **Backup / restore**: export e import per database in formato `.dump` o ZIP,
+  con coda, storico e backup di sicurezza prima del ripristino.
+  Vedi [Database backups](database-backups.md) per formati, requisiti e limiti.
 - **Add connection / New tenant**: collegare un database esistente, indicando
   un utente PostgreSQL già esistente e la sua password.
 - **Provision database**: creare un database e il relativo ruolo proprietario,
@@ -70,7 +74,7 @@ la connessione diretta o la porta di sessione.
 
 ### Requisiti e problemi frequenti
 
-- Elixir **1.18+**, Erlang/OTP **27+**, Rust, C/C++ toolchain, CMake e libclang.
+- Elixir **1.19+**, Erlang/OTP **27+**, Rust, C/C++ toolchain, CMake e libclang.
   In questa sessione sono stati usati Elixir 1.20.2, OTP 29 e PostgreSQL 18.6.
 - `eaddrinuse`: un'altra istanza usa già la porta. Ferma la vecchia istanza oppure
   configura `PORT`, `PROXY_PORT_SESSION`, `PROXY_PORT_TRANSACTION` e, se avvii
@@ -81,6 +85,10 @@ la connessione diretta o la porta di sessione.
 - Verifica di salute: `curl -i http://localhost:4000/api/health` deve restituire `204`.
 
 ## Preparazione del server Linux senza Docker
+
+Per l'installazione su `admin.sendvia.chat`, i percorsi del servizio, l'accesso
+iniziale e le regole di rete sono documentati in
+[Hetzner deployment](hetzner-deployment.md).
 
 Compila sul server o su una macchina con la stessa architettura e ABI Linux:
 
@@ -108,6 +116,7 @@ una release compilata su una distribuzione più recente verso una più vecchia.
 
 ```bash
 sudo cp deploy/systemd/supavisor.service /etc/systemd/system/
+sudo install -m 700 deploy/systemd/supavisor-admin-password /usr/local/sbin/supavisor-admin-password
 sudo systemctl daemon-reload
 sudo systemctl enable --now supavisor
 sudo systemctl status supavisor
@@ -127,8 +136,15 @@ imposta `ADMIN_BASE_URL=https://db.example.com` e `POOLER_HOST` all'host del poo
 Il firewall deve esporre solo le porte dei pool autorizzate, tenendo private
 le porte di clustering e i proxy interni `5412`, `12100`–`12107`.
 
-Configura SMTP per ricevere i magic link. In alternativa, un amministratore del
-server può generare un link per un'email presente in `ADMIN_EMAILS`:
+`PROXY_BIND_ADDRESS=127.0.0.1` mantiene tutti i listener PostgreSQL di Supavisor
+su loopback. Se Nginx gira sullo stesso server e sostituisce gli header
+`X-Forwarded-Proto`, `X-Forwarded-Port` e `X-Forwarded-For`, imposta
+`TRUST_PROXY_HEADERS=true`: la console riconosce HTTPS e genera URL WSS e cookie
+Secure. Gli header vengono accettati solo da connessioni locali.
+
+L'accesso con email e password non richiede SMTP. Per il primo accesso, un
+amministratore del server può generare un link per un'email presente in
+`ADMIN_EMAILS`, poi impostare la password in **Authorization**:
 
 ```bash
 sudo systemd-run --wait --pipe --collect \
@@ -142,6 +158,16 @@ sudo systemd-run --wait --pipe --collect \
 Il comando va eseguito sul server mentre il servizio è attivo. Il link dà accesso
 amministrativo, scade dopo 15 minuti e si può usare una sola volta.
 Il file di ambiente viene letto da systemd, senza eseguire il contenuto come comandi di shell.
+
+Per reimpostare una password dimenticata, senza email e senza la vecchia password:
+
+```bash
+sudo supavisor-admin-password admin@example.com
+```
+
+Il comando genera e mostra una nuova password e invalida le sessioni precedenti.
+Richiede un'email già autorizzata e il servizio attivo. Per vedere le istruzioni
+senza modificare nulla: `sudo supavisor-admin-password --help`.
 
 Questi file preparano l'installazione; non distribuiscono il progetto su un server remoto.
 
@@ -181,14 +207,19 @@ Provider setup reference:
 
 The console uses LiveView navigation, a responsive sidebar and a section search
 palette (Ctrl/Cmd + K). Tenants and PostgreSQL include search and pagination.
-The **API** section manages service WebSocket credentials and live connections
-at `/services/socket`, channel `services:gateway`. Applications authenticate
-with a dedicated token. The PostgreSQL REST API keeps its existing routes and
-credentials; it is independent of this service endpoint.
+**API** manages named REST/WebSocket keys, scopes and live connections.
+**Embedding** downloads and runs local models through ex_fastembed. **Mailer**
+provides a persistent inbox/outbox, Postbeam delivery and configurable incoming
+webhooks. **STT / TTS** provide a local ONNX graph loader; see
+[Local speech](local-speech.md) for folders, tensor inference and the remaining
+audio/text adapter work. **AI model** uses the same runtime with `priv/ai`;
+see [Local AI models](local-ai.md). Database import and export are available under
+**PostgreSQL → Backup / restore** for each database; see
+[Database backups](database-backups.md).
 
-Mailer shows the configured delivery adapter. Embedding, STT, TTS, AI model and
-Imports have dedicated pages describing their unconfigured status. Their
-provider integrations and processing jobs are not implemented yet.
+See [Workspace services](workspace-services.md) for setup, endpoints, payloads,
+queue semantics, deployment and storage limits. Existing PostgreSQL REST routes
+and credentials remain independent.
 
 ### Live updates and memory
 
@@ -225,8 +256,9 @@ Unavailable Linux counters show `—`; CPU needs two readings to calculate a del
 
 ### Instrumenting model providers
 
-Provider integrations are not connected yet, so the model counters initially
-show zero. Wrap each complete provider operation when adding an integration:
+Local embedding operations are instrumented automatically. AI, STT and TTS
+counters remain zero until their providers are implemented. Wrap each complete
+provider operation when adding an integration:
 
 ```elixir
 alias Supavisor.Monitoring.ModelMetrics
@@ -252,70 +284,9 @@ Collection definitions follow the
 [Linux `/proc` documentation](https://www.kernel.org/doc/html/latest/filesystems/proc.html)
 and the [Telemetry span contract](https://telemetry.hexdocs.pm/telemetry.html#span/3).
 
-## Service WebSocket API
+## Service REST and WebSocket API
 
-Open `/admin/api`. The endpoint runs whenever the application runs. The admin
-page monitors it automatically through LiveView; it does not open a separate
-service client and has no Connect/Disconnect button.
-
-### Credentials
-
-- Generate a token, or save your own random 32–128 character token (letters,
-  digits, underscores, hyphens). Generated tokens contain 256 random bits.
-- Copy a generated token immediately; its preview disappears after two minutes
-  or when navigating away. Only its SHA-256 hash and a fingerprint are stored
-  in the single `_supavisor.service_api_settings` configuration row.
-- Replacing or revoking the token disconnects authenticated service clients.
-  Console login and the existing PostgreSQL REST API credentials are separate.
-- Treat this as a server integration credential with access to the service
-  gateway. It is not a tenant-scoped credential or an administrator login.
-
-### Client protocol
-
-Use the `phoenix` JavaScript package (Phoenix Channels protocol v2). The server
-accepts WebSocket connections at `/services/socket/websocket`. A raw WebSocket
-connection alone is **not authenticated**: only a successful channel join grants
-access. Pass the token in the join payload, never in the URL. Tokens and service
-payloads are excluded from channel logs. Use WSS outside local development.
-
-```javascript
-import {Socket} from "phoenix"
-
-const socket = new Socket("ws://localhost:4000/services/socket")
-const channel = socket.channel("services:gateway", {token: API_TOKEN})
-
-channel.on("authorization:revoked", () => socket.disconnect())
-channel.join()
-  .receive("ok", ({client_id}) => {
-    console.log("Authenticated", client_id)
-    channel.push("gateway:status", {})
-      .receive("ok", status => console.log(status))
-  })
-  .receive("error", ({code}) => console.error(code))
-socket.connect()
-```
-
-The Phoenix client handles heartbeats and reconnects. Reconnects authenticate
-again, so a revoked token cannot rejoin. Update the client configuration after
-replacing a token. This endpoint deliberately accepts cross-origin clients;
-it does not accept console cookies as authorization. Authentication requires
-possession of the service token. The admin LiveView keeps its normal session
-and origin checks.
-
-### Current scope
-
-Only connection and authorization are implemented, as requested. The reserved
-service names are `mailer`, `embedding`, `ai_model`, `stt` and `tts`.
-`request:submit` with one of these services returns `service_not_implemented`;
-unknown services return `unknown_service`. No jobs are accepted or queued.
-The UI marks queue/processing as unavailable until handlers are implemented.
-Future handler integration belongs in `SupavisorWeb.ServiceChannel`; use
-`Supavisor.Monitoring.ModelMetrics.track/2` around completed model operations.
-
-There are at most 100 authenticated clients per server, 30 recent connection
-events, a 16 KiB WebSocket frame limit and 30 application events per client per
-second. The connection registry uses ETS snapshots, process monitors and
-coalesced PubSub updates. LiveView Streams insert/delete only changed rows.
-Neither connections nor activity nor metrics are written to PostgreSQL.
-They are local to this server and reset when their process restarts. The token
-configuration survives application restarts.
+The implementation and client examples are documented in
+[Workspace services](workspace-services.md). Both transports share named keys,
+permissions, queues and request IDs. The endpoint runs with the application;
+there is no manual Connect/Disconnect button in the admin panel.

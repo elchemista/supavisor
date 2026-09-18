@@ -1,4 +1,6 @@
 import Config
+
+config :supavisor, Supavisor.Services.LocalModels, enabled: true
 # Configure your database
 config :supavisor, Supavisor.Repo,
   username: "postgres",

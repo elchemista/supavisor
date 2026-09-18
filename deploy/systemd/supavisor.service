@@ -2,6 +2,8 @@
 Description=Supavisor PostgreSQL pooler and admin
 Wants=network-online.target
 After=network-online.target postgresql.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -13,15 +15,27 @@ ExecStartPre=/opt/supavisor/current/bin/migrate
 ExecStart=/opt/supavisor/current/bin/server
 Restart=on-failure
 RestartSec=5
-TimeoutStartSec=120
+TimeoutStartSec=180
 TimeoutStopSec=60
 LimitNOFILE=100000
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
+PrivateDevices=true
 ProtectHome=true
 ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 StateDirectory=supavisor
+StateDirectoryMode=0700
+TasksMax=2048
+Environment=SERVICE_DATA_DIR=/var/lib/supavisor/services
 Environment=ERL_CRASH_DUMP=/var/lib/supavisor/erl_crash.dump
 
 [Install]
