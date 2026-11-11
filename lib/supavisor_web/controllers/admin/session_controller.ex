@@ -4,6 +4,8 @@ defmodule SupavisorWeb.Admin.SessionController do
   alias SupavisorWeb.{AdminAuth, AdminCap, AdminCredential, AdminLoginLimiter}
   @development Application.compile_env(:supavisor, :env) == :dev
 
+  plug :require_credentials_store when action in [:new, :create, :password]
+
   def index(conn, _params), do: redirect(conn, to: ~p"/admin")
 
   def new(conn, _params) do
@@ -26,16 +28,16 @@ defmodule SupavisorWeb.Admin.SessionController do
         login_error(conn, "Please complete the anti-bot verification and try again.", 422)
 
       local_access?(conn) and AdminAuth.admin_email?(email) ->
-        conn |> AdminAuth.log_in_admin(email) |> redirect(to: ~p"/admin/postgres")
-
-      params["method"] == "magic_link" and AdminAuth.email_sign_in_enabled?() ->
-        send_magic_link(conn, email)
+        conn |> AdminAuth.log_in_admin(email) |> AdminAuth.redirect_after_login("/admin/postgres")
 
       true ->
         case AdminCredential.authenticate(email, params["password"]) do
           {:ok, version} ->
             AdminLoginLimiter.succeeded(email)
-            conn |> AdminAuth.log_in_admin(email, version) |> redirect(to: ~p"/admin")
+            conn |> AdminAuth.log_in_admin(email, version) |> AdminAuth.redirect_after_login()
+
+          {:error, :credentials_unavailable} ->
+            AdminAuth.credentials_unavailable(conn)
 
           _ ->
             login_error(conn, "Invalid email or password.", 401)
@@ -44,6 +46,10 @@ defmodule SupavisorWeb.Admin.SessionController do
   end
 
   def create(conn, _), do: login_error(conn, "Invalid email or password.", 401)
+
+  defp require_credentials_store(conn, _) do
+    if AdminCredential.available?(), do: conn, else: AdminAuth.credentials_unavailable(conn)
+  end
 
   def password(conn, %{"password" => params}) when is_map(params) do
     email = conn.assigns.current_admin_email
@@ -57,7 +63,7 @@ defmodule SupavisorWeb.Admin.SessionController do
           |> AdminAuth.log_in_admin(email, version)
           |> put_flash(
             :info,
-            "Password saved. You can now sign in without email delivery. Other sessions have been signed out."
+            "Password saved. Other sessions have been signed out."
           )
           |> redirect(to: ~p"/admin/authorization")
 
@@ -77,46 +83,6 @@ defmodule SupavisorWeb.Admin.SessionController do
     conn |> put_status(status) |> put_flash(:error, message) |> then(&html(&1, login_page(&1)))
   end
 
-  defp send_magic_link(conn, email) do
-    case AdminAuth.deliver_magic_link(email) do
-      {:error, _reason} ->
-        conn
-        |> put_flash(
-          :error,
-          "Could not send the sign-in link. Check the email delivery configuration."
-        )
-        |> then(&html(&1, login_page(&1)))
-
-      _ ->
-        conn
-        |> put_flash(
-          :info,
-          "If that email is configured for admin access, a sign-in link has been sent."
-        )
-        |> then(&html(&1, login_page(&1)))
-    end
-  end
-
-  def verify(conn, %{"token" => token}) do
-    case AdminAuth.verify_magic_link(token) do
-      {:ok, email} ->
-        destination =
-          if AdminCredential.configured?(email),
-            do: ~p"/admin",
-            else: ~p"/admin/authorization#password"
-
-        conn
-        |> AdminAuth.log_in_admin(email)
-        |> put_flash(:info, "Signed in.")
-        |> redirect(to: destination)
-
-      {:error, _reason} ->
-        conn
-        |> put_flash(:error, "That sign-in link is invalid or expired.")
-        |> redirect(to: ~p"/admin/login")
-    end
-  end
-
   def delete(conn, _params) do
     conn
     |> AdminAuth.log_out_admin()
@@ -133,8 +99,7 @@ defmodule SupavisorWeb.Admin.SessionController do
 
     description =
       if local?,
-        do:
-          "Sign in to the PostgreSQL console on this computer. No email delivery needed locally.",
+        do: "Sign in to the PostgreSQL console on this computer.",
         else: "Sign in with your administrator email and password."
 
     github =
@@ -155,29 +120,11 @@ defmodule SupavisorWeb.Admin.SessionController do
         ~s(<label class="field"><span>Password</span><input type="password" name="password" required maxlength="128" autocomplete="current-password"></label>)
       end
 
-    email_login =
-      if not local? and AdminAuth.email_sign_in_enabled?() do
-        """
-        <details class="login-alternative">
-          <summary>Sign in with an email link</summary>
-          <form method="post" action="/admin/login" data-cap-form>
-            <input type="hidden" name="_csrf_token" value="#{csrf}">
-            <input type="hidden" name="method" value="magic_link">
-            <label class="field"><span>Email</span><input type="email" name="email" required maxlength="254" autocomplete="email"></label>
-            #{captcha}
-            <button type="submit" class="secondary-button w-full">Send sign-in link</button>
-          </form>
-        </details>
-        """
-      else
-        ""
-      end
-
     setup_note =
       if local?,
         do: "",
         else:
-          ~s(<p class="login-help">First time here? Open the secure setup link provided by your server administrator to choose your password.</p>)
+          ~s(<p class="login-help">First time here? Ask your server administrator to generate your initial password with supavisor-admin-password.</p>)
 
     """
     <!DOCTYPE html>
@@ -210,7 +157,6 @@ defmodule SupavisorWeb.Admin.SessionController do
               <button type="submit" class="primary-button w-full">#{button}</button>
             </form>
             #{github}
-            #{email_login}
             #{setup_note}
           </section>
         </main>
@@ -238,8 +184,7 @@ defmodule SupavisorWeb.Admin.SessionController do
   defp local_access?(conn) do
     @development and
       conn.remote_ip in [{127, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 1}] and
-      conn.host in ["localhost", "127.0.0.1", "::1"] and
-      Application.get_env(:supavisor, Supavisor.Mailer)[:adapter] == Swoosh.Adapters.Local
+      conn.host in ["localhost", "127.0.0.1", "::1"]
   end
 
   defp flash_markup(conn, kind) do

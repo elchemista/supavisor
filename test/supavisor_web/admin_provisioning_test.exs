@@ -26,6 +26,26 @@ defmodule SupavisorWeb.AdminProvisioningTest do
              AdminProvisioning.validate_identifier(String.duplicate("a", 64))
   end
 
+  test "server address and credentials are reused automatically when no separate provisioner is configured" do
+    Application.put_env(:supavisor, AdminProvisioning, [])
+    repo = Supavisor.Repo.config()
+    assert AdminProvisioning.available?()
+    assert AdminProvisioning.allowed_targets() == [{repo[:hostname], repo[:port]}]
+
+    assert {:ok, %{rows: [[user, database]]}} =
+             AdminProvisioning.with_connection(repo[:hostname], repo[:port], fn conn ->
+               Postgrex.query(conn, "SELECT current_user, current_database()", [])
+             end)
+
+    assert user == repo[:username]
+    assert database == repo[:database]
+
+    assert {:error, :target_not_allowed} =
+             AdminProvisioning.with_connection("unconfigured.example", repo[:port], fn _ ->
+               flunk("must not connect")
+             end)
+  end
+
   test "disabled provisioning blocks before connecting to Postgres" do
     Application.put_env(:supavisor, AdminProvisioning,
       enabled: false,
@@ -108,6 +128,11 @@ defmodule SupavisorWeb.AdminProvisioningTest do
   end
 
   test "provisioned database and role accept real pooler connections" do
+    # Real pooler processes must see committed tenant metadata outside a sandbox
+    # transaction, including when this module follows sandboxed MCP tests.
+    Ecto.Adapters.SQL.Sandbox.mode(Supavisor.Repo, :auto)
+    on_exit(fn -> Ecto.Adapters.SQL.Sandbox.mode(Supavisor.Repo, :manual) end)
+
     id = "admin_provision_#{System.unique_integer([:positive])}"
 
     attrs = %{

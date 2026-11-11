@@ -1,6 +1,7 @@
 defmodule SupavisorWeb.AdminAccessCache do
   @moduledoc false
   use GenServer
+  require Logger
   @table __MODULE__
   @topic "admin:authorization"
   @ttl 5_000
@@ -22,8 +23,14 @@ defmodule SupavisorWeb.AdminAccessCache do
   def credential_versions do
     case cached_versions() do
       {:ok, versions} -> versions
-      :miss -> GenServer.call(__MODULE__, :refresh_versions)
+      :miss -> call_versions()
     end
+  end
+
+  defp call_versions do
+    GenServer.call(__MODULE__, :refresh_versions)
+  catch
+    :exit, _reason -> {:error, :credentials_unavailable}
   end
 
   def invalidate do
@@ -71,6 +78,17 @@ defmodule SupavisorWeb.AdminAccessCache do
     versions = SupavisorWeb.AdminCredential.versions()
     :ets.insert(@table, {:credential_versions, now() + @ttl, versions})
     {:reply, versions, state}
+  rescue
+    _error in [Postgrex.Error, DBConnection.ConnectionError, DBConnection.OwnershipError] ->
+      # Missing migrations and connection failures must not kill the cache or
+      # look like an administrator with no password/session version configured.
+      :ets.delete(@table, :credential_versions)
+
+      Logger.error(
+        "Administrator credentials unavailable. Check metadata database connectivity and run mix supavisor.migrate."
+      )
+
+      {:reply, {:error, :credentials_unavailable}, state}
   end
 
   @impl true

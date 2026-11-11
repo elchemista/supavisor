@@ -6,7 +6,6 @@ defmodule Supavisor.Monitoring.ConsoleMetrics do
   memory. These are host metrics, not cgroup limits or child-process totals.
   """
   use GenServer
-  alias Supavisor.Monitoring.ModelMetrics
 
   @table __MODULE__
   @interval 5_000
@@ -29,7 +28,6 @@ defmodule Supavisor.Monitoring.ConsoleMetrics do
   @impl true
   def init(_) do
     :ets.new(@table, [:named_table, :set, :protected, read_concurrency: true])
-    ModelMetrics.init()
 
     state = %{
       previous: nil,
@@ -44,9 +42,6 @@ defmodule Supavisor.Monitoring.ConsoleMetrics do
 
   @impl true
   def handle_info(:sample, state), do: {:noreply, sample(state)}
-
-  @impl true
-  def terminate(_, _), do: ModelMetrics.detach()
 
   defp sample(state) do
     system = read_system()
@@ -66,10 +61,6 @@ defmodule Supavisor.Monitoring.ConsoleMetrics do
 
     history = :queue.in(point, state.history)
     history = if state.count >= @history_limit, do: :queue.drop(history), else: history
-    models = ModelMetrics.snapshot()
-    completed = Enum.reduce(models, 0, &(&1.completed + &2))
-    errors = Enum.reduce(models, 0, &(&1.errors + &2))
-    in_flight = Enum.reduce(models, 0, &(&1.in_flight + &2))
 
     snapshot = %{
       time: time,
@@ -86,11 +77,7 @@ defmodule Supavisor.Monitoring.ConsoleMetrics do
       server_memory_percent: server_memory_percent,
       app_cpu: app_cpu,
       server_cpu: server_cpu,
-      cpu_count: system.cpu_count,
-      models: models,
-      completed: completed,
-      errors: errors,
-      in_flight: in_flight
+      cpu_count: system.cpu_count
     }
 
     :ets.insert(@table, {:snapshot, snapshot})

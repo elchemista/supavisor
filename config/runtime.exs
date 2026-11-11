@@ -17,19 +17,6 @@ parse_boolean = fn name, default ->
   end
 end
 
-if System.get_env("LOCAL_ONNX_ENABLED") != nil do
-  config :supavisor, Supavisor.Services.LocalModels,
-    enabled: parse_boolean.("LOCAL_ONNX_ENABLED", false)
-end
-
-if directory = System.get_env("LOCAL_ONNX_MODEL_DIR") do
-  unless Path.type(directory) == :absolute do
-    raise "LOCAL_ONNX_MODEL_DIR must be an absolute directory containing stt, tts and ai"
-  end
-
-  config :supavisor, Supavisor.Services.LocalModels, directory: directory
-end
-
 if config_env() == :prod do
   for name <- ~w(DATABASE_URL VAULT_ENC_KEY) do
     if System.get_env(name) in [nil, ""], do: raise("Environment variable #{name} is missing")
@@ -93,7 +80,6 @@ end
 
 if config_env() != :test do
   config :supavisor, :trust_proxy_headers, parse_boolean.("TRUST_PROXY_HEADERS", false)
-  config :supavisor, :admin_email_login_enabled, System.get_env("SMTP_HOST") not in [nil, ""]
 
   base_url =
     System.get_env("ADMIN_BASE_URL", "http://localhost:#{System.get_env("PORT", "4000")}")
@@ -115,10 +101,9 @@ if config_env() != :test do
       System.get_env("ADMIN_EMAILS", if(config_env() == :dev, do: "admin@localhost", else: ""))
       |> String.split(",", trim: true)
       |> Enum.map(&String.trim/1),
-    base_url: base_url,
-    email_from: {"Supavisor Admin", System.get_env("ADMIN_EMAIL_FROM", "admin@localhost")}
+    base_url: base_url
 
-  config :supavisor, :public_pooler_host, System.get_env("POOLER_HOST", uri.host)
+  config :supavisor, :public_pooler_host, System.get_env("POOLER_HOST")
 
   if System.get_env("ADMIN_PROVISIONING_ENABLED") != nil do
     config :supavisor, SupavisorWeb.AdminProvisioning,
@@ -135,19 +120,13 @@ if config_env() != :test do
         ssl: parse_boolean.("ADMIN_POSTGRES_SSL", false)
       ]
   end
-
-  if relay = System.get_env("SMTP_HOST") do
-    config :supavisor, Supavisor.Mailer,
-      adapter: Swoosh.Adapters.SMTP,
-      relay: relay,
-      port: String.to_integer(System.get_env("SMTP_PORT", "587")),
-      username: System.get_env("SMTP_USERNAME", ""),
-      password: System.get_env("SMTP_PASSWORD", ""),
-      auth: if(System.get_env("SMTP_USERNAME") in [nil, ""], do: :never, else: :always),
-      ssl: parse_boolean.("SMTP_SSL", false),
-      tls: if(parse_boolean.("SMTP_SSL", false), do: :never, else: :always)
-  end
 end
+
+config :supavisor, Supavisor.MCP.Auth,
+  allowed_origins:
+    System.get_env("MCP_ALLOWED_ORIGINS", "")
+    |> String.split(",", trim: true)
+    |> Enum.map(&String.trim/1)
 
 topologies = []
 
@@ -396,50 +375,17 @@ if System.get_env("LOGS_ENGINE") == "logflare" do
     backends: [LogflareLogger.HttpBackend]
 end
 
-# Workspace services store keys and model files outside the release directory.
-service_data_dir = System.get_env("SERVICE_DATA_DIR", Path.expand("../var/services", __DIR__))
-config :supavisor, :service_mail_key_dir, Path.join(service_data_dir, "mail-keys")
-
-unless System.get_env("FASTEMBED_CACHE_DIR") || System.get_env("HF_HOME") do
-  System.put_env("FASTEMBED_CACHE_DIR", Path.join(service_data_dir, "models"))
-end
-
-{:ok, service_smtp_address} =
-  System.get_env("SERVICE_SMTP_BIND", "127.0.0.1")
-  |> String.to_charlist()
-  |> :inet.parse_address()
-
-service_smtp_tls =
-  case {System.get_env("SERVICE_SMTP_CERTFILE"), System.get_env("SERVICE_SMTP_KEYFILE")} do
-    {cert, key} when is_binary(cert) and is_binary(key) ->
-      [certfile: String.to_charlist(cert), keyfile: String.to_charlist(key)]
-
-    _ ->
-      []
-  end
-
-config :supavisor, :inbound_smtp,
-  enabled:
-    System.get_env("SERVICE_SMTP_ENABLED", if(config_env() == :dev, do: "true", else: "false")) ==
-      "true",
-  address: service_smtp_address,
-  port: String.to_integer(System.get_env("SERVICE_SMTP_PORT", "2525")),
-  hostname: System.get_env("SERVICE_SMTP_HOSTNAME", "localhost"),
-  tls_options: service_smtp_tls
-
-# Optional retention. Zero keeps messages until an administrator deletes them.
-config :supavisor,
-       :service_mail_retention_days,
-       max(0, String.to_integer(System.get_env("SERVICE_MAIL_RETENTION_DAYS", "0")))
+# Preserve the existing backup location when upgrading from the services bundle.
+backup_data_dir =
+  System.get_env("SUPAVISOR_DATA_DIR") || System.get_env("SERVICE_DATA_DIR") ||
+    Path.expand("../var/services", __DIR__)
 
 # Private disk storage for logical PostgreSQL backups.
 config :supavisor, Supavisor.Backups,
   directory:
-    Path.expand(System.get_env("BACKUP_DIRECTORY", Path.join(service_data_dir, "backups"))),
+    Path.expand(System.get_env("BACKUP_DIRECTORY", Path.join(backup_data_dir, "backups"))),
   node_id: System.get_env("BACKUP_NODE_ID", to_string(elem(:inet.gethostname(), 1))),
   pg_bin: System.get_env("BACKUP_PG_BIN"),
   max_bytes: String.to_integer(System.get_env("BACKUP_MAX_BYTES", "2147483648")),
   quota_bytes: String.to_integer(System.get_env("BACKUP_QUOTA_BYTES", "21474836480")),
   timeout_seconds: String.to_integer(System.get_env("BACKUP_TIMEOUT_SECONDS", "3600"))
-
-config :supavisor, Supavisor.Services.Media, directory: Path.join(service_data_dir, "tmp")

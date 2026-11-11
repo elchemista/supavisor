@@ -13,6 +13,10 @@ defmodule Supavisor.Application do
 
   @impl true
   def start(_type, _args) do
+    if Application.get_env(:supavisor, :auto_migrate, false) do
+      Supavisor.Release.migrate()
+    end
+
     primary_config = :logger.get_primary_config()
 
     host =
@@ -140,20 +144,6 @@ defmodule Supavisor.Application do
         SupavisorWeb.AdminAccessCache,
         SupavisorWeb.AdminLoginLimiter,
         Supavisor.Monitoring.ConsoleMetrics,
-        {Task.Supervisor, name: Supavisor.ServiceTasks},
-        Supavisor.ServiceAPI.KeyCache,
-        Supavisor.ServiceAPI.RateLimiter,
-        Supavisor.Services.Embeddings,
-        {Supavisor.Services.LocalModels.Worker, :stt},
-        {Supavisor.Services.LocalModels.Worker, :tts},
-        {Supavisor.Services.LocalModels.Worker, :ai_model},
-        Supavisor.Services.Media,
-        Supavisor.Services.Inference,
-        {Oban, Application.fetch_env!(:supavisor, Oban)},
-        Supavisor.Services.MailWorker,
-        Supavisor.ServiceAPI.Gateway,
-        {DynamicSupervisor, strategy: :one_for_one, name: Supavisor.InboundSupervisor},
-        Supavisor.Services.InboundServer,
         Supavisor.Backups.Supervisor,
 
         # Start the Endpoint (http/https)

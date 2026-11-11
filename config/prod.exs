@@ -20,13 +20,6 @@ config :logger,
     [level_lower_than: :info]
   ]
 
-config :supavisor, Supavisor.Mailer,
-  adapter: Swoosh.Adapters.SMTP,
-  relay: "localhost",
-  port: 25,
-  auth: :never,
-  tls: :if_available
-
 # ## SSL Support
 #
 # To get SSL working, you will need to add the `https` key

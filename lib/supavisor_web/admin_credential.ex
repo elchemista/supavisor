@@ -15,10 +15,16 @@ defmodule SupavisorWeb.AdminCredential do
     timestamps(type: :utc_datetime_usec)
   end
 
-  def configured?(email), do: not is_nil(session_version(email))
+  def configured?(email), do: is_binary(session_version(email))
 
-  def session_version(email),
-    do: Map.get(AdminAccessCache.credential_versions(), normalize(email))
+  def session_version(email) do
+    case AdminAccessCache.credential_versions() do
+      versions when is_map(versions) -> Map.get(versions, normalize(email))
+      {:error, :credentials_unavailable} = error -> error
+    end
+  end
+
+  def available?, do: is_map(AdminAccessCache.credential_versions())
 
   def versions do
     emails = SupavisorWeb.AdminSettings.uncached_admin_emails()
@@ -38,6 +44,8 @@ defmodule SupavisorWeb.AdminCredential do
     else
       {:error, :invalid_credentials}
     end
+  rescue
+    _ in [Postgrex.Error, DBConnection.ConnectionError] -> {:error, :credentials_unavailable}
   end
 
   def authenticate(_, _), do: {:error, :invalid_credentials}

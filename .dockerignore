@@ -46,13 +46,10 @@ erl_crash.dump
 .env
 .env.*
 
-# Local service secrets and model downloads
+# Private runtime files and retired model downloads
 /var/
 /.fastembed_cache/
 /priv/stt/
 /priv/tts/
 /priv/ai/
-/vendor/ex_fastembed/_build/
-/vendor/ex_fastembed/deps/
-/vendor/ex_fastembed/priv/native/
-/vendor/ex_fastembed/native/ex_fastembed/target/
+/vendor/ex_fastembed/

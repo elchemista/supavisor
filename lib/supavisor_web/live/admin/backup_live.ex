@@ -1,7 +1,7 @@
 defmodule SupavisorWeb.Admin.BackupLive do
   use SupavisorWeb, :live_view
   alias Supavisor.Backups
-  alias SupavisorWeb.Admin.ServiceUI, as: UI
+  alias SupavisorWeb.Admin.DatabaseUI, as: UI
 
   @impl true
   def mount(_, session, socket) do
@@ -13,7 +13,7 @@ defmodule SupavisorWeb.Admin.BackupLive do
     {:ok,
      socket
      |> assign(
-       service_session: session,
+       database_session: session,
        target: nil,
        database: "",
        server: 0,

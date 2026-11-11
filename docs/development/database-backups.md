@@ -58,8 +58,7 @@ source database administrator, including during selective restores.
 
 The console's own metadata database can be **exported**, but live import into a
 database with that name is blocked. Restore it offline while Supavisor is stopped,
-using PostgreSQL tools and retaining the original `VAULT_ENC_KEY`. Mailbox secrets,
-stored passwords and other encrypted configuration depend on that key.
+using PostgreSQL tools and retaining the original `VAULT_ENC_KEY`. Stored passwords and other encrypted configuration depend on that key.
 
 ## Server requirements and configuration
 
@@ -71,14 +70,15 @@ PostgreSQL server. Restoring an archive to an older PostgreSQL version is not gu
 
 | Environment variable | Default | Purpose |
 | --- | --- | --- |
-| `BACKUP_DIRECTORY` | `$SERVICE_DATA_DIR/backups` | Private persistent storage for uploads and backup files |
+| `BACKUP_DIRECTORY` | `$SUPAVISOR_DATA_DIR/backups` | Private persistent storage for uploads and backup files |
 | `BACKUP_NODE_ID` | Machine hostname | Stable identity of the node owning local backup files |
 | `BACKUP_PG_BIN` | Search `PATH` | Optional directory containing `pg_dump` and `pg_restore` |
 | `BACKUP_MAX_BYTES` | `2147483648` | Maximum uploaded, extracted or generated file size: 2 GiB |
 | `BACKUP_QUOTA_BYTES` | `21474836480` | Aggregate backup storage budget: 20 GiB |
 | `BACKUP_TIMEOUT_SECONDS` | `3600` | Maximum runtime per operation, including validation and safety export |
 
-Set `SERVICE_DATA_DIR=/var/lib/supavisor/services` for the included Linux service.
+Set `SUPAVISOR_DATA_DIR=/var/lib/supavisor/services` for the included Linux service.
+The previous `SERVICE_DATA_DIR` variable remains a fallback for existing installations.
 Its `StateDirectory=supavisor` permits writing there. If `BACKUP_DIRECTORY` is
 outside `/var/lib/supavisor`, grant the service user access and add the exact path
 to the unit's `ReadWritePaths`; the example service has `ProtectSystem=strict`.

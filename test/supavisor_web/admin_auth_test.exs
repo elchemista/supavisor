@@ -1,92 +1,78 @@
 defmodule SupavisorWeb.AdminAuthTest do
-  use ExUnit.Case, async: false
+  use SupavisorWeb.ConnCase, async: false
 
-  import Phoenix.ConnTest
-  import Plug.Conn
-  import Swoosh.TestAssertions
-
-  alias SupavisorWeb.AdminAuth
-
-  @endpoint SupavisorWeb.Endpoint
-  use Phoenix.VerifiedRoutes,
-    endpoint: SupavisorWeb.Endpoint,
-    router: SupavisorWeb.Router,
-    statics: SupavisorWeb.static_paths()
-
-  setup :set_swoosh_global
+  alias SupavisorWeb.{AdminAccessCache, AdminAuth, AdminCredential, AdminSettings}
 
   setup do
     original_config = Application.fetch_env!(:supavisor, AdminAuth)
 
     Application.put_env(:supavisor, AdminAuth,
       admin_emails: ["admin@example.com"],
-      magic_link_ttl_seconds: 900,
       session_ttl_seconds: 28_800,
-      email_from: {"Supavisor Admin", "admin@localhost"},
       base_url: "http://localhost:4002"
     )
 
+    Supavisor.Repo.delete_all(AdminSettings)
+    Supavisor.Repo.delete_all(AdminCredential)
+    AdminAccessCache.invalidate()
+
     on_exit(fn ->
       Application.put_env(:supavisor, AdminAuth, original_config)
+      AdminAccessCache.invalidate()
     end)
 
     :ok
   end
 
-  test "allowed admin email receives a magic link" do
-    assert {:ok, :sent} = AdminAuth.deliver_magic_link("Admin@Example.com")
-
-    assert_email_sent(fn email ->
-      assert email.to == [{"", "admin@example.com"}]
-      assert email.subject == "Your Supavisor admin sign-in link"
-      assert email.text_body =~ "http://localhost:4002/admin/magic/"
-    end)
+  test "allowed administrator identities are normalized" do
+    assert AdminAuth.admin_email?(" Admin@Example.com ")
+    refute AdminAuth.admin_email?("other@example.com")
   end
 
-  test "unlisted email does not receive a magic link" do
-    assert :ok = AdminAuth.deliver_magic_link("other@example.com")
-    refute_email_sent()
+  test "authenticated sessions retain the credential version", %{conn: conn} do
+    {:ok, version} =
+      AdminCredential.save_password("admin@example.com", %{
+        "new_password" => "a strong test password",
+        "password_confirmation" => "a strong test password"
+      })
+
+    conn = conn |> init_test_session(%{}) |> AdminAuth.log_in_admin(" Admin@Example.com ")
+
+    assert get_session(conn, "admin_session_version") == version
+    assert {:ok, "admin@example.com"} = AdminAuth.authenticate_session(get_session(conn))
   end
 
-  test "magic link can be used once" do
-    assert {:ok, :sent} = AdminAuth.deliver_magic_link("admin@example.com")
-    token = delivered_token()
+  test "password changes invalidate existing sessions", %{conn: conn} do
+    {:ok, _} =
+      AdminCredential.save_password("admin@example.com", %{
+        "new_password" => "a strong test password",
+        "password_confirmation" => "a strong test password"
+      })
 
-    assert {:ok, "admin@example.com"} = AdminAuth.verify_magic_link(token)
-    assert {:error, :invalid_or_expired} = AdminAuth.verify_magic_link(token)
+    session =
+      conn
+      |> init_test_session(%{})
+      |> AdminAuth.log_in_admin("admin@example.com")
+      |> get_session()
+
+    assert {:ok, "admin@example.com"} = AdminAuth.authenticate_session(session)
+
+    {:ok, _} =
+      AdminCredential.save_password("admin@example.com", %{
+        "current_password" => "a strong test password",
+        "new_password" => "another strong test password",
+        "password_confirmation" => "another strong test password"
+      })
+
+    assert :error = AdminAuth.authenticate_session(session)
   end
 
-  test "magic link expires after configured ttl" do
-    Application.put_env(:supavisor, AdminAuth,
-      admin_emails: ["admin@example.com"],
-      magic_link_ttl_seconds: 1,
-      session_ttl_seconds: 28_800,
-      email_from: {"Supavisor Admin", "admin@localhost"},
-      base_url: "http://localhost:4002"
-    )
-
-    assert {:ok, :sent} = AdminAuth.deliver_magic_link("admin@example.com")
-    token = delivered_token()
-    Process.sleep(1100)
-
-    assert {:error, :invalid_or_expired} = AdminAuth.verify_magic_link(token)
-  end
-
-  test "concurrent requests can consume a link only once" do
-    {:ok, url} = AdminAuth.create_magic_link("admin@example.com")
-    token = url |> String.split("/admin/magic/") |> List.last() |> URI.decode_www_form()
-
-    results =
-      1..12
-      |> Task.async_stream(fn _ -> AdminAuth.verify_magic_link(token) end)
-      |> Enum.map(fn {:ok, result} -> result end)
-
-    assert Enum.count(results, &match?({:ok, _}, &1)) == 1
-  end
-
-  test "a removed administrator cannot use a previously issued link" do
-    {:ok, url} = AdminAuth.create_magic_link("admin@example.com")
-    token = url |> String.split("/admin/magic/") |> List.last() |> URI.decode_www_form()
+  test "removed administrators cannot reuse an existing session", %{conn: conn} do
+    session =
+      conn
+      |> init_test_session(%{})
+      |> AdminAuth.log_in_admin("admin@example.com")
+      |> get_session()
 
     Application.put_env(
       :supavisor,
@@ -94,35 +80,57 @@ defmodule SupavisorWeb.AdminAuthTest do
       Keyword.put(Application.fetch_env!(:supavisor, AdminAuth), :admin_emails, [])
     )
 
-    assert {:error, :invalid_or_expired} = AdminAuth.verify_magic_link(token)
+    AdminAccessCache.invalidate()
+    assert :error = AdminAuth.authenticate_session(session)
   end
 
-  test "admin session expires after configured ttl" do
-    Application.put_env(:supavisor, AdminAuth,
-      admin_emails: ["admin@example.com"],
-      magic_link_ttl_seconds: 900,
-      session_ttl_seconds: -1,
-      email_from: {"Supavisor Admin", "admin@localhost"},
-      base_url: "http://localhost:4002"
-    )
-
+  test "admin session expires after configured ttl", %{conn: conn} do
     conn =
-      build_conn()
+      conn
       |> init_test_session(%{
         "admin_email" => "admin@example.com",
-        "admin_authenticated_at" => System.system_time(:second)
+        "admin_authenticated_at" => System.system_time(:second) - 28_801
       })
-      |> get(~p"/admin")
+      |> get("/admin")
 
-    assert redirected_to(conn) == ~p"/admin/login"
+    assert redirected_to(conn) == "/admin/login"
   end
 
-  defp delivered_token do
-    assert_received {:email, email}
+  test "login page offers passwords without mail links", %{conn: conn} do
+    html = conn |> get("/admin/login") |> html_response(200)
+    assert html =~ "current-password"
+    assert html =~ "supavisor-admin-password"
+    refute html =~ "magic_link"
+    refute html =~ "Send sign-in link"
+  end
 
-    [_, token] =
-      Regex.run(~r{/admin/magic/([^\s]+)}, email.text_body)
+  test "login resumes an OAuth authorization request once", %{conn: conn} do
+    return_to = "/oauth/authorize?client_id=test&state=state"
 
-    URI.decode_www_form(token)
+    conn =
+      conn
+      |> init_test_session(%{"admin_return_to" => return_to})
+      |> AdminAuth.redirect_after_login()
+
+    assert redirected_to(conn) == return_to
+    refute get_session(conn, :admin_return_to)
+  end
+
+  test "login ignores external or unrelated return URLs", %{conn: conn} do
+    for return_to <- [
+          "https://example.com/oauth/authorize?client_id=test",
+          "//example.com/oauth/authorize?client_id=test",
+          "/oauth/authorize/../other",
+          "/admin/postgres",
+          "/oauth/authorize?bad=\\example.com"
+        ] do
+      conn =
+        conn
+        |> init_test_session(%{"admin_return_to" => return_to})
+        |> AdminAuth.redirect_after_login()
+
+      assert redirected_to(conn) == "/admin"
+      refute get_session(conn, :admin_return_to)
+    end
   end
 end

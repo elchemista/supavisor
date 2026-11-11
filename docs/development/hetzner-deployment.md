@@ -2,11 +2,11 @@
 
 ## Installation
 
-- Console and service API: `https://admin.sendvia.chat`.
+- Console and database MCP: `https://admin.sendvia.chat`.
 - Administrator: `yuriy.zhar@gmail.com`.
 - Host: Ubuntu 24.04 ARM64, `89.167.44.148`, IPv6 `2a01:4f9:c014:ee00::1`.
 - DNS: `admin` A → `89.167.44.148`; AAAA → `2a01:4f9:c014:ee00::1`.
-- Nginx terminates TLS and forwards HTTP, LiveView and service WebSockets to
+- Nginx terminates TLS and forwards HTTP and LiveView WebSockets to
   `127.0.0.1:4000`. Certbot renews the certificate automatically.
 - Supavisor runs as the unprivileged `supavisor` user under systemd.
 - Release builds run separately as `supavisor-build`, using Elixir 1.20.4 and
@@ -41,11 +41,12 @@ Both transaction (`127.0.0.1:6543`) and session (`127.0.0.1:5452`) pooling were
 verified with read-only queries. Remote pool access needs an SSH tunnel or
 private network; the pool ports are not publicly exposed.
 
-**New tenant** lets you select a configured PostgreSQL server and database.
-The form fills the host and port, suggests a tenant name and the database's
-login-capable owner, and offers existing login roles in a dropdown. Enter the
-role's password; PostgreSQL cannot return plaintext passwords. Manual entry is
-available for other servers. Lists load asynchronously and are cached in memory
+**Connect database** lets you choose an existing database. The server address
+comes from configuration automatically; a server selector appears only when
+multiple distinct servers are configured. The form suggests a connection name
+and the database's login-capable owner. Enter the role's password; PostgreSQL
+cannot return plaintext passwords. Advanced settings are collapsed, and saving
+shows a connection URL ready to copy. Lists load asynchronously and are cached in memory
 for 30 seconds without database-size or connection-count scans.
 LiveView reconnects preserve the draft's selected server and database. The form
 fits narrow mobile screens; connection examples scroll within their own panel.
@@ -74,40 +75,25 @@ each app release. Fly egress IPs are not assumed static for these tunnels;
 authentication uses the separate restricted keys. Existing direct PostgreSQL
 IP allowlists have not been changed.
 
-## Sign in and create service keys
+## Sign in and authorize MCP clients
 
 Normal sign-in uses the administrator email and password, with no SMTP
 dependency. An initial password has been configured for the administrator and
 delivered privately; it is not stored in this document. Change it under
 **Authorization → Update your sign-in password**.
 
-For a new installation without an administrator password, generate a one-time
-administrator link on the server:
-
-```bash
-ssh -t hetzner 'sudo /usr/local/sbin/supavisor-admin-link'
-```
-
-The link expires after 15 minutes, works once and is invalidated by a service
-restart. Open it in a browser: **Authorization → Set your sign-in password**
-lets you choose a password of 15–128 characters. Subsequent sign-ins use that
-password. Password changes require the current password and invalidate other
-sessions. The initial password form is accessible only after authenticating
-with the secure setup link; there is no public registration endpoint.
-
-Then use **API → New API key**. Select REST,
-WebSocket, permissions and expiry, and copy the token while it is visible.
-
-The token authenticates workspace services such as embedding and mail. Native
-Ecto/Postgrex connections still use PostgreSQL tenant credentials. A service
-API token is not a PostgreSQL password or a JWT for the original tenant
-management API.
+For a new installation without an administrator password, generate it on the
+server with `sudo supavisor-admin-password [ADMIN_EMAIL]`. Password changes
+require the current password and invalidate other sessions. There is no public
+administrator registration endpoint.
 
 Configure GitHub login under **Authorization**, using callback
-`https://admin.sendvia.chat/admin/auth/github/callback`. Configuring the admin
-email allowlist alone does not configure outgoing email delivery. Email-link
-sign-in is hidden until `SMTP_HOST` is configured; password sign-in stays
-available independently.
+`https://admin.sendvia.chat/admin/auth/github/callback`.
+
+External assistants connect to `/mcp` and authenticate through OAuth. Each
+connection asks an authenticated administrator to approve database permissions.
+See [Database MCP](mcp.md) for setup. Native Ecto/Postgrex connections continue
+to use PostgreSQL tenant credentials.
 
 Passwords use PBKDF2-HMAC-SHA256 with 600,000 iterations and a random 32-byte
 salt, implemented with Erlang/OTP crypto. Only hashes are stored. Sign-in
@@ -117,7 +103,7 @@ briefly and invalidated on changes. See the
 [OWASP password storage guidance](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
 and [OTP crypto documentation](https://www.erlang.org/docs/28/apps/crypto/crypto.html#pbkdf2_hmac/5).
 
-Password, email-link requests and GitHub sign-in starts require the
+Password and GitHub sign-in starts require the
 **I'm not a robot** checkbox powered by
 [PhoenixCap](https://github.com/elchemista/phoenix_cap). Verification happens
 before password checking or OAuth state creation, and each token works once.
@@ -126,7 +112,7 @@ Challenges and tokens expire in ETS and do not write to PostgreSQL. The
 `/admin/cap/` endpoints require the login session's CSRF token and are limited
 to 20 requests per IP per minute and 100 requests in total per minute.
 Existing password/IP limits also apply. JavaScript is required to sign in.
-The SSH-generated one-time recovery link remains available independently.
+The SSH password reset command remains available independently.
 
 ### Reset a forgotten password over SSH
 
@@ -168,13 +154,12 @@ removing the remaining PostgreSQL firewall exceptions.
 
 PostgreSQL certificates, application passwords and database contents are
 preserved. Existing PostgreSQL is not restarted as part of this deployment.
-Inbound public SMTP is disabled; receiving mail from the Internet requires
-separate MX/routing configuration.
 
 `TRUST_PROXY_HEADERS=true` trusts forwarded protocol, port and client IP only
 from loopback. Nginx replaces those headers. Session cookies use Secure over
 HTTPS, HttpOnly and SameSite=Lax. Sign-in paths and token query strings are not
-written to Nginx access logs; the application suppresses magic-link path logs.
+written to Nginx access logs. OAuth authorization, token and MCP requests must
+also avoid recording credentials and authorization codes.
 
 ## Operations
 
@@ -188,47 +173,13 @@ curl --fail --silent --show-error https://admin.sendvia.chat/api/health
 ```
 
 The health endpoint returns HTTP 204. `/admin` requires an authenticated admin;
-service REST requests require a scoped Bearer token and WebSocket channel joins
-require a token in the join payload.
+`/mcp` requires an OAuth access token with the scopes approved during consent.
 
-Persistent data lives under `/var/lib/supavisor/services`: downloaded embedding
-models, private mail keys and database backup files. The service has a 6 GiB
-memory ceiling and a five-core CPU quota to leave capacity for PostgreSQL.
-
-### Embedding model storage and memory
-
-**Embedding → Model catalog** shows each variant's download size and can sort
-by smallest download. Selecting a model shows its cached files, repository size,
-host RAM available and Supavisor process RAM. RAM measurements cover all services;
-download size is not a model RAM estimate. Public file-size metadata is cached
-for six hours in `services/embedding-sizes.json`, with no database writes.
-
-After five idle minutes, the native embedding session is released. The configured
-model and its downloaded files remain available; the next REST/WebSocket request
-loads the model and then runs. Startup restores the selection in standby without
-loading weights. Requests in progress or queued prevent idle unloading.
-**Unload · release RAM** puts the model in standby immediately, keeping its files
-and selection. Idle timers and last-use tracking do not write to PostgreSQL.
-**Delete downloaded files** removes the selected repository's cache after
-confirmation; variants in the same repository share files and are listed in
-the confirmation. Unload any active variant in that repository first. Both
-operations require an idle embedding queue. Deleting the configured model also
-clears its selection, preventing automatic re-download. PostgreSQL data is unaffected.
-
-The native library is vendored at its pinned revision with small lifecycle
-extensions documented in `vendor/ex_fastembed/SUPAVISOR_PATCH.md`. Release builds
-compile it for the server architecture. The STT, TTS and AI graph runtime is
-enabled with `LOCAL_ONNX_ENABLED=true`. `LOCAL_ONNX_MODEL_DIR` points to
-`/var/lib/supavisor/services/onnx-models/20260918`, containing Kokoro under `tts/`,
-Whisper INT8 under `stt/`, and Qwen3 0.6B INT8 under `ai/`. Weights,
-voices and tokenizer assets are stored outside application releases. Models
-load on demand and unload after five idle minutes; no graphs load at boot.
-The 6 GiB service memory limit remains in place. Kokoro MP3 generation,
-Whisper INT8 Italian transcription and Qwen text generation share authenticated
-REST/WebSocket operations. Install `ffmpeg` and `espeak-ng`.
-Private audio is stored under `services/tmp` and expires after three days;
-Oban sweeps hourly and stores only housekeeping jobs in `_supavisor`.
-See [speech services](local-speech.md) and [AI generation](local-ai.md).
+Database backup files remain in the configured backup directory. Old embedding
+models, audio and mail files from previous releases are no longer used by the
+application; removing existing files is a separate storage maintenance action.
+The service has a 6 GiB memory ceiling and a five-core CPU quota to leave
+capacity for PostgreSQL.
 
 Before deployment, database dumps, role definitions, PostgreSQL configuration,
 certificates and firewall configuration were saved under

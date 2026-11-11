@@ -31,13 +31,13 @@ defmodule SupavisorWeb.Router do
     plug(OpenApiSpex.Plug.PutApiSpec, module: SupavisorWeb.ApiSpec)
   end
 
-  pipeline :service_api do
-    plug(:accepts, ["json"])
-    plug(SupavisorWeb.Services.Auth)
+  pipeline :mcp do
+    plug(SupavisorWeb.MCPOrigin)
+    plug(SupavisorWeb.MCPAuth)
   end
 
-  pipeline :media_api do
-    plug(SupavisorWeb.Services.Auth)
+  pipeline :oauth do
+    plug(:accepts, ["json"])
   end
 
   pipeline :metrics do
@@ -94,26 +94,27 @@ defmodule SupavisorWeb.Router do
     # get("/clusters/:alias/terminate", ClusterController, :terminate)
   end
 
-  scope "/api/services/v1", SupavisorWeb.Services do
-    pipe_through(:service_api)
-    get("/status", ServiceController, :status)
-    get("/models", ServiceController, :models)
-    post("/embeddings", ServiceController, :embeddings)
-    post("/tts", ServiceController, :tts)
-    post("/stt", ServiceController, :stt)
-    post("/ai", ServiceController, :ai)
-    get("/requests/:id", ServiceController, :request)
-    post("/requests/:id/cancel", ServiceController, :cancel)
-    get("/mailboxes", ServiceController, :mailboxes)
-    get("/mail/messages", ServiceController, :messages)
-    get("/mail/messages/:id", ServiceController, :message)
-    post("/mail/send", ServiceController, :send_mail)
+  scope "/", SupavisorWeb do
+    pipe_through(:oauth)
+    get("/.well-known/oauth-protected-resource/mcp", OAuthController, :resource_metadata)
+    get("/.well-known/oauth-protected-resource", OAuthController, :resource_metadata)
+    get("/.well-known/oauth-authorization-server", OAuthController, :metadata)
+    post("/oauth/register", OAuthController, :register, log: false)
+    post("/oauth/token", OAuthController, :token, log: false)
+    post("/oauth/revoke", OAuthController, :revoke, log: false)
   end
 
-  scope "/api/services/v1/audio", SupavisorWeb.Services do
-    pipe_through(:media_api)
-    post("/", AudioController, :create)
-    get("/:id", AudioController, :show)
+  scope "/", SupavisorWeb do
+    pipe_through([:browser, :admin_fetch])
+    get("/oauth/authorize", OAuthController, :authorize, log: false)
+    post("/oauth/authorize", OAuthController, :approve, log: false)
+  end
+
+  scope "/", SupavisorWeb do
+    pipe_through(:mcp)
+    post("/mcp", MCPController, :handle, log: false)
+    get("/mcp", MCPController, :unsupported)
+    delete("/mcp", MCPController, :unsupported)
   end
 
   scope "/metrics", SupavisorWeb do
@@ -130,7 +131,6 @@ defmodule SupavisorWeb.Router do
     post("/login", SessionController, :create)
     post("/auth/github", GithubController, :start)
     get("/auth/github/callback", GithubController, :callback)
-    get("/magic/:token", SessionController, :verify, log: false)
     delete("/logout", SessionController, :delete)
   end
 
@@ -151,13 +151,9 @@ defmodule SupavisorWeb.Router do
       live("/postgres", PostgresLive, :index)
       live("/postgres/backups", BackupLive, :index)
       live("/api", ApiLive, :index)
+      live("/mcp", ApiLive, :index)
       live("/authorization", AuthorizationLive, :index)
       live("/metrics", MetricsLive, :index)
-      live("/mailer", MailerLive, :index)
-      live("/embedding", EmbeddingLive, :index)
-      live("/stt", LocalModelsLive, :stt)
-      live("/tts", LocalModelsLive, :tts)
-      live("/ai-model", LocalModelsLive, :ai_model)
       live("/provision", ProvisionLive, :new)
       live("/tenants/new", TenantLive, :new)
       live("/tenants/:external_id/edit", TenantLive, :edit)
@@ -183,10 +179,6 @@ defmodule SupavisorWeb.Router do
       pipe_through(:browser)
 
       live_dashboard("/dashboard", metrics: SupavisorWeb.Telemetry)
-
-      if Mix.env() == :dev do
-        forward("/dev/mailbox", Plug.Swoosh.MailboxPreview)
-      end
     end
   end
 

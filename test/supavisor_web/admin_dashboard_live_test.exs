@@ -21,47 +21,65 @@ defmodule SupavisorWeb.AdminDashboardLiveTest do
     assert redirected_to(conn) == ~p"/admin/login"
   end
 
-  test "authenticated admin can list tenants", %{conn: conn} do
+  test "authenticated admin can list connection profiles", %{conn: conn} do
     tenant_fixture(%{external_id: "admin_list_tenant"})
 
-    {:ok, _view, html} = live(conn, ~p"/admin")
+    {:ok, view, html} = live(conn, ~p"/admin")
 
-    assert html =~ "admin_list_tenant"
-    assert html =~ "Tenants"
-    assert html =~ "Provision database"
+    assert html =~ "Connections"
+    assert has_element?(view, "h1", "Connections")
+    assert has_element?(view, "nav.sidebar-navigation a[href='/admin']", "Connections")
+    assert has_element?(view, "a[href='/admin/tenants/new']", "Connect database")
+    assert has_element?(view, "a[href='/admin/provision']", "Create database")
+
+    view |> form("form[phx-change='search']", search: "admin_list_tenant") |> render_change()
+    assert has_element?(view, "#tenant-rows tr", "admin_list_tenant")
   end
 
   test "authenticated admin can render provisioning form", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/admin/provision")
 
-    assert html =~ "Provision database"
-    assert html =~ "Supavisor connection name"
-    assert html =~ "Database name to create"
-    assert html =~ "Database username to create"
+    assert html =~ "Create database"
+    assert html =~ "Database name"
   end
 
   test "server overview shows databases and PostgreSQL roles", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/admin/postgres")
-    html = render_async(view)
-    assert html =~ "PostgreSQL roles"
-    assert html =~ "supavisor_test"
-    assert html =~ "postgres"
-    assert html =~ "Add connection"
+    render_async(view)
+    database = Supavisor.Repo.config()[:database]
+
+    view |> form("form[phx-change='search']", search: database) |> render_change()
+    assert has_element?(view, "#postgres-databases tr", database)
+    assert has_element?(view, "a[aria-label='Connect #{database}']")
+
+    view |> element("button[phx-value-tab='roles']") |> render_click()
+    view |> form("form[phx-change='search']", search: "postgres") |> render_change()
+    assert has_element?(view, "#postgres-roles tr", "postgres")
   end
 
-  test "existing database selection prefills the connection", %{conn: conn} do
+  test "existing database selection uses the configured server", %{conn: conn} do
+    database = Supavisor.Repo.config()[:database]
+
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/admin/tenants/new?#{%{db_database: "selected_db", db_host: "db.internal", db_port: 5440}}"
+        ~p"/admin/tenants/new?#{%{db_database: database, db_host: "db.internal", db_port: 5440}}"
       )
 
-    assert has_element?(view, "input[name='tenant[db_database]'][value='selected_db']")
-    assert has_element?(view, "input[name='tenant[db_host]'][value='db.internal']")
+    render_async(view)
+
+    assert has_element?(
+             view,
+             "select[name='tenant[db_database]'] option[value='#{database}'][selected]"
+           )
+
+    assert has_element?(view, "input[name='tenant[db_host]'][value='localhost']")
+    assert has_element?(view, "input[name='tenant[db_port]'][value='6432']")
   end
 
   test "invalid pool values produce an error without crashing", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/admin/tenants/new")
+    render_async(view)
     params = tenant_params("invalid_pool", "stored_users") |> Map.put("default_pool_size", "")
     html = view |> form("#tenant-form", tenant: params) |> render_submit()
     assert html =~ "Enter a number from 1"
@@ -70,6 +88,7 @@ defmodule SupavisorWeb.AdminDashboardLiveTest do
 
   test "authenticated admin can create stored-user tenant", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/admin/tenants/new")
+    render_async(view)
 
     params = tenant_params("stored_dashboard_tenant", "stored_users")
 
@@ -77,7 +96,8 @@ defmodule SupavisorWeb.AdminDashboardLiveTest do
     |> form("#tenant-form", tenant: params)
     |> render_submit()
 
-    assert_redirected(view, ~p"/admin")
+    assert has_element?(view, "#tenant-connected")
+    assert has_element?(view, "#connected-database-url")
 
     tenant = Tenants.get_tenant_by_external_id("stored_dashboard_tenant")
     assert tenant.require_user == true
@@ -86,6 +106,7 @@ defmodule SupavisorWeb.AdminDashboardLiveTest do
 
   test "authenticated admin can create auth-query tenant", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/admin/tenants/new")
+    render_async(view)
 
     view |> form("#tenant-form", tenant: %{"auth_mode" => "auth_query"}) |> render_change()
 
@@ -98,7 +119,8 @@ defmodule SupavisorWeb.AdminDashboardLiveTest do
     |> form("#tenant-form", tenant: params)
     |> render_submit()
 
-    assert_redirected(view, ~p"/admin")
+    assert has_element?(view, "#tenant-connected")
+    refute has_element?(view, "#connected-database-url")
 
     tenant = Tenants.get_tenant_by_external_id("auth_query_dashboard_tenant")
     assert tenant.require_user == false
@@ -121,11 +143,12 @@ defmodule SupavisorWeb.AdminDashboardLiveTest do
       })
 
     {:ok, view, _html} = live(conn, ~p"/admin/tenants/#{tenant.external_id}/edit")
+    render_async(view)
 
     params =
       "admin_edit_tenant"
       |> tenant_params("stored_users")
-      |> Map.put("db_database", "edited_db")
+      |> Map.put("default_pool_size", "21")
       |> put_in(["users", "0", "id"], hd(tenant.users).id)
       |> put_in(["users", "0", "db_password"], "")
 
@@ -136,17 +159,27 @@ defmodule SupavisorWeb.AdminDashboardLiveTest do
     assert_redirected(view, ~p"/admin")
 
     updated = Tenants.get_tenant_by_external_id("admin_edit_tenant")
-    assert updated.db_database == "edited_db"
+    assert updated.db_database == Supavisor.Repo.config()[:database]
+    assert updated.default_pool_size == 21
     assert hd(updated.users).db_password == "postgres"
   end
 
-  test "authenticated admin can delete tenant", %{conn: conn} do
+  test "authenticated admin can remove a connection profile without deleting its database", %{
+    conn: conn
+  } do
     tenant_fixture(%{external_id: "admin_delete_tenant"})
     {:ok, view, _html} = live(conn, ~p"/admin")
+    view |> form("form[phx-change='search']", search: "admin_delete_tenant") |> render_change()
 
-    view
-    |> element("button[phx-value-external-id='admin_delete_tenant'][aria-label='Delete tenant']")
-    |> render_click()
+    html =
+      view
+      |> element(
+        "button[phx-value-external-id='admin_delete_tenant'][aria-label='Remove connection admin_delete_tenant']"
+      )
+      |> render_click()
+
+    assert html =~ "Connection profile removed"
+    assert html =~ "The PostgreSQL database and its data were kept"
 
     refute Tenants.get_tenant_by_external_id("admin_delete_tenant")
   end

@@ -20,9 +20,6 @@ config :supavisor,
 
 config :prom_ex, storage_adapter: Supavisor.Monitoring.PromEx.Store
 
-# Enabled in development or explicitly with LOCAL_ONNX_ENABLED; no model loads at startup.
-config :supavisor, Supavisor.Services.LocalModels, enabled: false
-
 # Configures the endpoint
 config :supavisor, SupavisorWeb.Endpoint,
   url: [host: "localhost"],
@@ -33,19 +30,13 @@ config :supavisor, SupavisorWeb.Endpoint,
 
 config :supavisor, SupavisorWeb.AdminAuth,
   admin_emails: ["admin@localhost"],
-  magic_link_ttl_seconds: 900,
   session_ttl_seconds: 28_800,
-  email_from: {"Supavisor Admin", "admin@localhost"},
   base_url: "http://localhost:4000"
 
 config :supavisor, SupavisorWeb.AdminProvisioning,
-  enabled: false,
+  enabled: true,
   provisioner: [],
   allowed_targets: []
-
-config :supavisor, Supavisor.Mailer, adapter: Swoosh.Adapters.Local
-
-config :swoosh, :api_client, false
 
 config :phoenix_cap,
   json_library: JSON,
@@ -126,19 +117,13 @@ config :phoenix, :filter_parameters, [
   "secret",
   "token",
   "code",
+  "code_verifier",
+  "refresh_token",
+  "client_secret",
+  "consent",
   "state",
   "text",
   "html",
   "input",
   "email"
 ]
-
-# Only housekeeping jobs are persisted. Model requests/results remain in ETS.
-config :supavisor, Oban,
-  repo: Supavisor.Repo,
-  prefix: "_supavisor",
-  queues: [maintenance: 1],
-  plugins: [
-    {Oban.Pruner, max_age: 86_400},
-    {Oban.Cron, crontab: [{"17 * * * *", Supavisor.Services.MediaCleanup}]}
-  ]

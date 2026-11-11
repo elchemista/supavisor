@@ -1,6 +1,9 @@
 import Config
 
-config :supavisor, Supavisor.Services.LocalModels, enabled: true
+# Keep the local console usable after pulling code with new metadata migrations.
+# Production releases run bin/migrate before starting the service instead.
+config :supavisor, :auto_migrate, true
+
 # Configure your database
 config :supavisor, Supavisor.Repo,
   username: "postgres",
@@ -11,17 +14,6 @@ config :supavisor, Supavisor.Repo,
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
-
-config :supavisor, SupavisorWeb.AdminProvisioning,
-  enabled: true,
-  provisioner: [
-    username: "postgres",
-    password: "postgres",
-    database: "postgres",
-    ssl: false,
-    ssl_opts: []
-  ],
-  allowed_targets: [{"localhost", 5432}, {"127.0.0.1", 5432}]
 
 # For development, we disable any cache and enable
 # debugging and code reloading.

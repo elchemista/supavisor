@@ -35,6 +35,65 @@ defmodule SupavisorWeb.AdminProvisioningForm do
     Map.merge(new_params(), params || %{})
   end
 
+  @doc "Resolve console defaults and a configured server without accepting an arbitrary host."
+  def console_attrs(params) when is_map(params) do
+    params = normalize_params(params)
+
+    database =
+      if is_binary(params["database_name"]), do: String.trim(params["database_name"]), else: ""
+
+    with {:ok, {host, port}} <- console_target(Map.get(params, "server", "0")) do
+      result =
+        params
+        |> Map.put("database_name", database)
+        |> default_name("external_id", database)
+        |> default_name("role_name", database)
+        |> Map.put("target_host", to_string(host))
+        |> Map.put("target_port", to_string(port))
+        |> to_attrs()
+
+      case result do
+        {:error, errors, resolved} ->
+          # A generated owner/connection name has the same validation as the
+          # database name. Report its error once on the field the user entered.
+          errors =
+            Enum.reduce(["external_id", "role_name"], errors, fn field, errors ->
+              if params[field] in [nil, ""], do: Map.delete(errors, field), else: errors
+            end)
+
+          {:error, errors, resolved}
+
+        other ->
+          other
+      end
+    else
+      :error ->
+        {:error, %{"server" => ["Choose one of the configured PostgreSQL servers."]}, params}
+    end
+  end
+
+  def console_attrs(_),
+    do: {:error, %{base: ["Enter a database name to continue."]}, new_params()}
+
+  defp console_target(index) when is_binary(index) do
+    with {index, ""} when index >= 0 <- Integer.parse(index),
+         target when not is_nil(target) <- Enum.at(AdminProvisioning.allowed_targets(), index) do
+      case target do
+        {host, port} -> {:ok, {host, port}}
+        %{host: host, port: port} -> {:ok, {host, port}}
+        _ -> :error
+      end
+    else
+      _ -> :error
+    end
+  end
+
+  defp console_target(_), do: :error
+
+  defp default_name(params, field, database) do
+    if params[field] in [nil, ""], do: Map.put(params, field, database), else: params
+  end
+
   def to_attrs(params) do
     params = normalize_params(params)
     errors = collect_errors(params)
@@ -51,20 +110,30 @@ defmodule SupavisorWeb.AdminProvisioningForm do
 
   def errors_from_reason(:not_configured),
     do: %{
-      base: ["Database provisioning needs provisioner credentials and allowed targets in config."]
+      base: [
+        "The server cannot create databases yet. Ask the server administrator to configure its PostgreSQL account."
+      ]
     }
 
   def errors_from_reason(:target_not_allowed),
     do: %{base: ["That host and port are not in the allowed provisioning targets."]}
 
   def errors_from_reason(:tenant_exists),
-    do: %{base: ["A tenant with that external ID already exists."]}
+    do: %{
+      base: [
+        "A connection with that name already exists. Choose another database name or change the connection name in Advanced settings."
+      ]
+    }
 
   def errors_from_reason(:database_exists),
     do: %{base: ["That database already exists. Pick a new database name."]}
 
   def errors_from_reason(:role_exists),
-    do: %{base: ["That role already exists. Pick a new role name."]}
+    do: %{
+      base: [
+        "That database username already exists. Choose another database name or change the owner username in Advanced settings."
+      ]
+    }
 
   def errors_from_reason(:invalid_identifier),
     do: %{base: ["Database and role names must be lowercase Postgres identifiers."]}
@@ -93,6 +162,15 @@ defmodule SupavisorWeb.AdminProvisioningForm do
 
     %{base: ["Could not save Supavisor metadata: #{inspect(errors)}"]}
   end
+
+  def errors_from_reason(
+        {:postgres, %Postgrex.Error{postgres: %{code: :insufficient_privilege}}}
+      ),
+      do: %{
+        base: [
+          "This server's PostgreSQL account cannot create databases or owner roles. Ask the server administrator to grant the required privileges."
+        ]
+      }
 
   def errors_from_reason({:postgres, %Postgrex.Error{postgres: %{message: message}}}),
     do: %{base: ["Postgres rejected the provisioning SQL: #{message}"]}

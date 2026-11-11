@@ -3,13 +3,6 @@ defmodule SupavisorWeb.Admin.MetricsLive do
   alias Supavisor.Monitoring.ConsoleMetrics
   alias SupavisorWeb.AdminAuth
 
-  @services %{
-    ai_model: %{label: "AI model", icon: "hero-sparkles"},
-    embedding: %{label: "Embedding", icon: "hero-cube-transparent"},
-    stt: %{label: "STT", icon: "hero-microphone"},
-    tts: %{label: "TTS", icon: "hero-speaker-wave"}
-  }
-
   @impl true
   def mount(_params, session, socket) do
     if connected?(socket), do: ConsoleMetrics.subscribe()
@@ -17,7 +10,6 @@ defmodule SupavisorWeb.Admin.MetricsLive do
     {:ok,
      socket
      |> assign(paused: false, metrics_session: session, metrics: nil)
-     |> stream(:models, [])
      |> load_snapshot()}
   end
 
@@ -50,11 +42,10 @@ defmodule SupavisorWeb.Admin.MetricsLive do
       metrics ->
         socket
         |> assign(
-          metrics: Map.drop(metrics, [:history, :models]),
+          metrics: Map.drop(metrics, [:history]),
           cpu_chart: chart(metrics.history, :app_cpu, :server_cpu, metrics.plot_time),
           memory_chart: chart(metrics.history, :app_memory, :server_memory, metrics.plot_time)
         )
-        |> stream(:models, Enum.map(metrics.models, &Map.merge(&1, Map.fetch!(@services, &1.id))))
     end
   end
 
@@ -90,9 +81,6 @@ defmodule SupavisorWeb.Admin.MetricsLive do
   defp percentage(value), do: "#{Float.round(value * 1.0, 1)}%"
   defp meter(nil), do: "width: 0%"
   defp meter(value), do: "width: #{min(100, max(0, value))}%"
-  defp duration(nil), do: "—"
-  defp duration(ms) when ms >= 1000, do: "#{Float.round(ms / 1000, 2)} s"
-  defp duration(ms), do: "#{Float.round(ms * 1.0, 1)} ms"
 
   defp clock(time),
     do:
@@ -122,7 +110,7 @@ defmodule SupavisorWeb.Admin.MetricsLive do
   def render(assigns) do
     ~H"""
     <section class="page-hero">
-      <div><div class="eyebrow"><span class="eyebrow-line"></span> A PULSE ON YOUR STACK</div><h1>Metrics<span class="heading-dot">.</span></h1><p class="page-subtitle">Your resources and model traffic. Just the numbers that matter.</p></div>
+      <div><div class="eyebrow"><span class="eyebrow-line"></span> A PULSE ON YOUR STACK</div><h1>Metrics<span class="heading-dot">.</span></h1><p class="page-subtitle">Monitor the PostgreSQL pooler and server resources.</p></div>
       <button type="button" class="secondary-button" phx-click="toggle_updates"><span class={if @paused, do: "hero-play", else: "hero-pause"}></span><%= if @paused, do: "Resume live", else: "Pause live" %></button>
     </section>
     <div :if={@metrics == nil} class="notice" role="status">The metrics collector is starting. Live readings will appear shortly.</div>
@@ -164,13 +152,7 @@ defmodule SupavisorWeb.Admin.MetricsLive do
         <section class="data-panel metrics-chart-panel"><div class="metrics-panel-heading"><div><h2>CPU activity</h2><p>Percentage of total server capacity</p></div><span class="metrics-window">10 MIN</span></div><div class="chart-legend"><span><i class="server"></i>Entire server</span><span><i class="app"></i>Supavisor</span></div><.history_chart chart={@cpu_chart} title="Supavisor and server CPU usage over the last 10 minutes, from 0 to 100 percent" /></section>
         <section class="data-panel metrics-chart-panel"><div class="metrics-panel-heading"><div><h2>Memory usage</h2><p>Percentage of physical server RAM</p></div><span class="metrics-window">10 MIN</span></div><div class="chart-legend"><span><i class="server"></i>Entire server</span><span><i class="app"></i>Supavisor</span></div><.history_chart chart={@memory_chart} title="Supavisor and server memory usage over the last 10 minutes, from 0 to 100 percent" /></section>
       </div>
-      <section class="data-panel metrics-models">
-        <div class="metrics-panel-heading"><div><div class="section-kicker">MODEL TRAFFIC</div><h2>Every request, accounted for.</h2><p>Completed requests, including failures, since the collector started.</p></div><span class="metrics-total"><strong><%= @metrics.completed %></strong> processed</span></div>
-        <div class="metrics-traffic-summary"><span><i class="status-dot"></i><strong><%= @metrics.in_flight %></strong> in progress</span><span><span class="hero-exclamation-circle"></span><strong><%= @metrics.errors %></strong> errors</span><span>Started <%= Calendar.strftime(@metrics.started_at, "%d %b · %H:%M UTC") %></span></div>
-        <div class="table-scroll"><table class="responsive-table metrics-model-table"><thead><tr><th>Service</th><th>Completed</th><th>Errors</th><th>In progress</th><th>Avg. duration</th></tr></thead><tbody id="model-metrics" phx-update="stream"><tr :for={{id, model} <- @streams.models} id={id}><td class="name-cell"><span class="resource-icon"><span class={model.icon}></span></span><div><strong><%= model.label %></strong><small :if={model.completed == 0 and model.in_flight == 0} class="table-secondary">Awaiting requests</small></div></td><td data-label="Completed" class="mono"><%= model.completed %></td><td data-label="Errors" class={["mono", model.errors > 0 && "metric-error"]}><%= model.errors %></td><td data-label="In progress" class="mono"><%= model.in_flight %></td><td data-label="Avg. duration" class="mono muted"><%= duration(model.average_ms) %></td></tr></tbody></table></div>
-        <p :if={@metrics.completed == 0 and @metrics.in_flight == 0} class="metrics-empty-note"><span class="hero-information-circle"></span>No model traffic yet. Model providers still need to be connected; counters will populate when instrumented requests run.</p>
-      </section>
-      <div class="metrics-footnotes"><div><span class="hero-bolt"></span><p><strong>Light by design.</strong> One shared sampler, 120 readings in memory and four service counters. No metric writes to PostgreSQL.</p></div><div><span class="hero-information-circle"></span><p>Server RAM used is total RAM minus available RAM. Supavisor RAM is its process’s resident memory. Server figures already include Supavisor; do not add the two readings. CPU is averaged across all server CPUs. History and totals reset when the collector restarts; unavailable readings show “—”.</p></div></div>
+      <div class="metrics-footnotes"><div><span class="hero-bolt"></span><p><strong>Light by design.</strong> One shared sampler and 120 readings in memory. No metric writes to PostgreSQL.</p></div><div><span class="hero-information-circle"></span><p>Server RAM used is total RAM minus available RAM. Supavisor RAM is its process’s resident memory. Server figures already include Supavisor; do not add the two readings. CPU is averaged across all server CPUs. History resets when the collector restarts; unavailable readings show “—”.</p></div></div>
     </div>
     """
   end

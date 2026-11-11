@@ -40,7 +40,33 @@ export const Workspace = {
     }
     this.click = event => {
       const target = event.target
-      if (target.closest("[data-open-sidebar]")) {
+      const copyButton = target.closest("[data-copy-target]")
+      if (copyButton) {
+        event.preventDefault()
+        const field = this.el.querySelector(copyButton.dataset.copyTarget)
+        const text = field?.value ?? field?.textContent?.trim()
+        if (text) {
+          const feedback = copied => {
+            const status = this.el.querySelector("[data-copy-feedback]")
+            if (status) status.textContent = copied ? "Copied to clipboard." : "Select and copy the connection details."
+            copyButton.setAttribute("aria-label", copied ? "Copied to clipboard" : "Copy connection details")
+          }
+          const selectFallback = () => {
+            field.focus?.()
+            if (field.select) field.select()
+            else {
+              const range = document.createRange()
+              range.selectNodeContents(field)
+              const selection = window.getSelection()
+              selection.removeAllRanges()
+              selection.addRange(range)
+            }
+            feedback(false)
+          }
+          if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => feedback(true), selectFallback)
+          else selectFallback()
+        }
+      } else if (target.closest("[data-open-sidebar]")) {
         this.open = true
         this.syncDrawer()
         this.sidebar.querySelector("[data-close-sidebar]").focus()

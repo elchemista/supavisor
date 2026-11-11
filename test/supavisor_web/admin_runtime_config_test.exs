@@ -14,12 +14,7 @@ defmodule SupavisorWeb.AdminRuntimeConfigTest do
     "ADMIN_POSTGRES_HOST" => "db.internal",
     "ADMIN_POSTGRES_PORT" => "5439",
     "ADMIN_POSTGRES_USER" => "provisioner",
-    "ADMIN_POSTGRES_PASSWORD" => "example-password",
-    "SMTP_HOST" => "smtp.example.com",
-    "SMTP_PORT" => "587",
-    "SMTP_USERNAME" => "mailer@example.com",
-    "SMTP_PASSWORD" => "example-smtp-password",
-    "SMTP_SSL" => "false"
+    "ADMIN_POSTGRES_PASSWORD" => "example-password"
   }
 
   setup do
@@ -36,7 +31,7 @@ defmodule SupavisorWeb.AdminRuntimeConfigTest do
     :ok
   end
 
-  test "production config reads admin, SMTP, provisioner, URL and bind address at runtime" do
+  test "production config reads admin, provisioner, URL and bind address at runtime" do
     config = Config.Reader.read!("config/runtime.exs", env: :prod)
     app = config[:supavisor]
 
@@ -55,8 +50,6 @@ defmodule SupavisorWeb.AdminRuntimeConfigTest do
     assert app[:public_pooler_host] == "pool.example.com"
     assert app[SupavisorWeb.AdminProvisioning][:allowed_targets] == [{"db.internal", 5439}]
     assert app[SupavisorWeb.AdminProvisioning][:enabled]
-    assert app[Supavisor.Mailer][:adapter] == Swoosh.Adapters.SMTP
-    assert app[Supavisor.Mailer][:tls] == :always
     assert config[:libcluster][:topologies] == []
   end
 

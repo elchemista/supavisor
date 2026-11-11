@@ -13,10 +13,7 @@ defmodule SupavisorWeb.Endpoint do
 
   socket "/live", Phoenix.LiveView.Socket, websocket: [connect_info: [session: @session_options]]
 
-  socket "/services/socket", SupavisorWeb.ServiceSocket,
-    websocket: [check_origin: false, max_frame_size: 262_144],
-    longpoll: false
-
+  plug :rewrite_local_proxy_headers
   plug :rewrite_proxy_headers
 
   plug Phoenix.LiveDashboard.RequestLogger,
@@ -35,8 +32,6 @@ defmodule SupavisorWeb.Endpoint do
     event_prefix: [:phoenix, :endpoint],
     log: {__MODULE__, :request_log_level, []}
 
-  plug SupavisorWeb.Services.AudioUploadAuth
-
   plug Plug.Parsers,
     parsers: [
       :urlencoded,
@@ -51,10 +46,11 @@ defmodule SupavisorWeb.Endpoint do
   plug Plug.Session, @session_options
   plug SupavisorWeb.Router
 
-  # Sign-in links contain a one-time credential in their path, not just in parameters.
   @doc false
-  def request_log_level(%{path_info: ["admin", "magic" | _]}), do: false
   def request_log_level(_conn), do: :info
+
+  defp rewrite_local_proxy_headers(conn, _opts),
+    do: SupavisorWeb.MCPOrigin.rewrite_local_proxy(conn)
 
   defp rewrite_proxy_headers(conn, _opts) do
     if Application.get_env(:supavisor, :trust_proxy_headers, false) and

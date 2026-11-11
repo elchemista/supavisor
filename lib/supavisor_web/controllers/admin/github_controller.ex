@@ -65,7 +65,7 @@ defmodule SupavisorWeb.Admin.GithubController do
       conn
       |> AdminAuth.log_in_admin(email)
       |> put_flash(:info, "Signed in with GitHub.")
-      |> redirect(to: ~p"/admin")
+      |> AdminAuth.redirect_after_login()
     else
       {:error, :not_allowed} ->
         failure(conn, "None of your verified GitHub email addresses is on the admin list.")

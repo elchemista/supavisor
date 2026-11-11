@@ -14,30 +14,34 @@ mix phx.server
 ```
 
 Apri [il pannello](http://localhost:4000/admin). L’email `admin@localhost` è già
-compilata: seleziona **I'm not a robot** e premi **Sign in locally**. In sviluppo, dal PC locale e con il mailer
-locale, l’accesso è diretto. La release di produzione usa email e password; un
-link monouso generato dal server permette di impostare la prima password.
+compilata: seleziona **I'm not a robot** e premi **Sign in locally**. In sviluppo,
+dal PC locale, l’accesso è diretto. La release di produzione usa email e
+password; la prima password viene generata dal comando amministrativo sul server.
 
 `mix setup` installa le dipendenze, crea il database se manca, esegue le
 migrazioni e compila CSS/JavaScript. Non carica i seed dei test e non ricrea
 utenti o tabelle dei database applicativi. Non usare `mix ecto.reset` sui dati
 che vuoi conservare.
 
+In sviluppo, `mix phx.server` applica automaticamente le migrazioni metadata
+pendenti prima di avviare il pannello. Il database deve già esistere (crealo con
+`mix setup` al primo avvio). In produzione resta necessario `bin/migrate`, già
+eseguito da `ExecStartPre` nel servizio systemd fornito.
+
 Le credenziali locali predefinite sono `postgres` / `postgres` su `localhost`.
 Per cambiarle senza modificare il codice:
 
 ```bash
 export DATABASE_URL='ecto://utente:password@127.0.0.1:5432/supavisor_dev'
-export ADMIN_POSTGRES_HOST=127.0.0.1
-export ADMIN_POSTGRES_PORT=5432
-export ADMIN_POSTGRES_USER=postgres
-export ADMIN_POSTGRES_PASSWORD='password-del-tuo-postgres'
 mix setup
 mix phx.server
 ```
 
 Nella URL codifica i caratteri speciali della password (per esempio `@` come `%40`).
-Per `ADMIN_POSTGRES_PASSWORD` usa invece la password originale.
+La console riutilizza automaticamente questo server e queste credenziali per
+elencare e creare database. Un account separato `ADMIN_POSTGRES_*` serve solo
+se vuoi usare credenziali amministrative diverse; l'account usato per creare
+database deve avere i relativi permessi PostgreSQL.
 
 ### Cosa puoi fare
 
@@ -46,13 +50,16 @@ Per `ADMIN_POSTGRES_PASSWORD` usa invece la password originale.
 - **Backup / restore**: export e import per database in formato `.dump` o ZIP,
   con coda, storico e backup di sicurezza prima del ripristino.
   Vedi [Database backups](database-backups.md) per formati, requisiti e limiti.
-- **Add connection / New tenant**: collegare un database esistente, indicando
-  un utente PostgreSQL già esistente e la sua password.
-- **Provision database**: creare un database e il relativo ruolo proprietario,
-  con password casuale e profilo Supavisor. Salva la password mostrata al termine.
-- **Edit tenant**: aggiornare credenziali memorizzate, utenti e parametri del pool.
+- **Connect database**: scegliere un database dall'elenco. Il pannello propone
+  automaticamente il nome della connessione e il proprietario del database;
+  inserisci la password dell'utente PostgreSQL già esistente.
+- **Create database**: inserire il nome del nuovo database. Il pannello crea
+  automaticamente il proprietario e la connessione Supavisor con lo stesso nome,
+  genera una password e mostra i dati pronti per collegarsi. Salva la password
+  mostrata al termine. I nomi possono essere personalizzati nelle opzioni avanzate.
+- **Edit connection**: aggiornare credenziali memorizzate, utenti e parametri del pool.
   Lascia la password vuota per conservare quella già salvata.
-- **Delete tenant**: eliminare il profilo Supavisor. Il database e il ruolo
+- **Remove connection**: eliminare il profilo Supavisor. Il database e il ruolo
   PostgreSQL restano presenti.
 
 I profili Supavisor non sono l'inventario dei database. Gli utenti nei profili
@@ -61,11 +68,16 @@ La pagina PostgreSQL consente di consultare i ruoli; i nuovi ruoli vengono creat
 insieme ai database dal modulo di provisioning. Le configurazioni auth-query
 usano un manager PostgreSQL già predisposto con i permessi per la query.
 
-Esempio per un database creato dal pannello, con connessione `mia_app` e ruolo
-`mia_app_user`:
+I form usano direttamente il server PostgreSQL configurato per l'installazione:
+non occorre compilare host, porta o URL. Se sono configurati più server, scegli
+quello desiderato dall'elenco. Pooling, TLS, regole di rete e autenticazione
+tramite query restano disponibili nelle opzioni avanzate; i valori predefiniti
+permettono di creare o collegare un database senza modificarle.
+
+Esempio per il database `mia_app` creato con i nomi predefiniti:
 
 ```bash
-psql -h 127.0.0.1 -p 6543 -U mia_app_user.mia_app -d mia_app_db -W
+psql -h 127.0.0.1 -p 6543 -U mia_app.mia_app -d mia_app -W
 ```
 
 Per session pooling usa `-p 5452`. La porta `5432` continua a raggiungere PostgreSQL
@@ -79,8 +91,9 @@ la connessione diretta o la porta di sessione.
 - `eaddrinuse`: un'altra istanza usa già la porta. Ferma la vecchia istanza oppure
   configura `PORT`, `PROXY_PORT_SESSION`, `PROXY_PORT_TRANSACTION` e, se avvii
   più pooler, anche `PROXY_PORT`, `SESSION_PROXY_PORTS`, `TRANSACTION_PROXY_PORTS`.
-- La sessione del browser dura 8 ore. In produzione, ogni link di accesso è
-  monouso e scade dopo 15 minuti; dopo un riavvio richiedine uno nuovo.
+- La sessione del browser dura 8 ore. Per generare o reimpostare una password
+  usa `supavisor-admin-password` sul server oppure
+  `mix supavisor.admin.reset_password` da un checkout locale.
 - UI senza stile: esegui `mix assets.setup && mix assets.build` e ricarica.
 - Verifica di salute: `curl -i http://localhost:4000/api/health` deve restituire `204`.
 
@@ -142,24 +155,9 @@ su loopback. Se Nginx gira sullo stesso server e sostituisce gli header
 `TRUST_PROXY_HEADERS=true`: la console riconosce HTTPS e genera URL WSS e cookie
 Secure. Gli header vengono accettati solo da connessioni locali.
 
-L'accesso con email e password non richiede SMTP. Per il primo accesso, un
-amministratore del server può generare un link per un'email presente in
-`ADMIN_EMAILS`, poi impostare la password in **Authorization**:
-
-```bash
-sudo systemd-run --wait --pipe --collect \
-  -p User=supavisor -p Group=supavisor \
-  -p WorkingDirectory=/opt/supavisor/current \
-  -p EnvironmentFile=/etc/supavisor/supavisor.env \
-  /opt/supavisor/current/bin/supavisor rpc \
-  '{:ok, url} = SupavisorWeb.AdminAuth.create_magic_link("admin@example.com"); IO.puts(url)'
-```
-
-Il comando va eseguito sul server mentre il servizio è attivo. Il link dà accesso
-amministrativo, scade dopo 15 minuti e si può usare una sola volta.
-Il file di ambiente viene letto da systemd, senza eseguire il contenuto come comandi di shell.
-
-Per reimpostare una password dimenticata, senza email e senza la vecchia password:
+Per il primo accesso o per reimpostare una password dimenticata, un
+amministratore del server genera una password per un'email già presente in
+`ADMIN_EMAILS`:
 
 ```bash
 sudo supavisor-admin-password admin@example.com
@@ -177,7 +175,7 @@ Open **Authorization** in the console to manage the administrator email list.
 The initial list comes from `ADMIN_EMAILS`; after the first save, PostgreSQL
 stores the list in `_supavisor.admin_settings`. Keep your current address in the
 list when saving. Admin access is checked again on requests, LiveView events,
-navigation and API channel messages.
+navigation and MCP authorization requests.
 
 To enable GitHub sign-in, register an OAuth App in GitHub Developer Settings.
 Set its homepage to the console URL and its callback to:
@@ -206,27 +204,18 @@ Provider setup reference:
 ## Console sections
 
 The console uses LiveView navigation, a responsive sidebar and a section search
-palette (Ctrl/Cmd + K). Tenants and PostgreSQL include search and pagination.
-**API** manages named REST/WebSocket keys, scopes and live connections.
-**Embedding** downloads and runs local models through ex_fastembed. **Mailer**
-provides a persistent inbox/outbox, Postbeam delivery and configurable incoming
-webhooks. **STT / TTS** provide a local ONNX graph loader; see
-[Local speech](local-speech.md) for folders, tensor inference and the remaining
-audio/text adapter work. **AI model** uses the same runtime with `priv/ai`;
-see [Local AI models](local-ai.md). Database import and export are available under
-**PostgreSQL → Backup / restore** for each database; see
-[Database backups](database-backups.md).
-
-See [Workspace services](workspace-services.md) for setup, endpoints, payloads,
-queue semantics, deployment and storage limits. Existing PostgreSQL REST routes
-and credentials remain independent.
+palette (Ctrl/Cmd + K). Connections and PostgreSQL include search and pagination.
+**MCP** connects external assistants through OAuth with explicit database
+permissions. See [Database MCP](mcp.md) for connection and authorization setup.
+Database import and export are available under **PostgreSQL → Backup / restore**
+for each database; see [Database backups](database-backups.md).
 
 ### Live updates and memory
 
-Tenant lists use database pagination and LiveView Streams, selecting only the
+Connection lists use database pagination and LiveView Streams, selecting only the
 visible page and user counts. PostgreSQL tables also use Streams, with bounded
-catalog reads and ten visible rows per page. Tenant changes are broadcast via
-PubSub to refresh other open tenant pages.
+catalog reads and ten visible rows per page. Connection changes are broadcast via
+PubSub to refresh other open connection pages.
 
 Administrator allowlists use a supervised, protected ETS table with concurrent
 reads. Database refreshes are serialized and cached for five seconds. Saving
@@ -248,45 +237,10 @@ logical host CPUs: 100% means the whole server, rather than a single core.
 These are host metrics, not cgroup quotas.
 
 The collector keeps a protected ETS snapshot and at most 120 chart samples
-(10 minutes). LiveView updates arrive through PubSub, and model rows use
-Streams. **Pause live** unsubscribes that view without stopping the shared
+(10 minutes). LiveView updates arrive through PubSub. **Pause live** unsubscribes that view without stopping the shared
 collector. There are no metric tables, migrations, PostgreSQL metric writes or
 per-request logs. History and request totals reset when the collector restarts.
 Unavailable Linux counters show `—`; CPU needs two readings to calculate a delta.
 
-### Instrumenting model providers
-
-Local embedding operations are instrumented automatically. AI, STT and TTS
-counters remain zero until their providers are implemented. Wrap each complete
-provider operation when adding an integration:
-
-```elixir
-alias Supavisor.Monitoring.ModelMetrics
-
-ModelMetrics.track(:ai_model, fn ->
-  # Call the provider and consume the complete response here.
-  # Return {:ok, result} or {:error, reason}.
-  MyModelProvider.complete(prompt)
-end)
-```
-
-Use `:embedding`, `:stt` or `:tts` for those services. For streaming providers,
-consume the stream inside the function; returning a lazy stream would only time
-its creation. Retries within the function count as one logical request.
-Returned errors and exceptions count as failures; exceptions retain their
-original behavior. The wrapper emits Telemetry start/stop/exception events,
-and the handler updates four fixed ETS rows atomically. Each row retains only
-successes, errors, cumulative duration and in-progress requests. Completed
-counts include successes and failures; average duration covers both. No prompt,
-response, token, user ID or unbounded model-name labels are retained.
-
 Collection definitions follow the
-[Linux `/proc` documentation](https://www.kernel.org/doc/html/latest/filesystems/proc.html)
-and the [Telemetry span contract](https://telemetry.hexdocs.pm/telemetry.html#span/3).
-
-## Service REST and WebSocket API
-
-The implementation and client examples are documented in
-[Workspace services](workspace-services.md). Both transports share named keys,
-permissions, queues and request IDs. The endpoint runs with the application;
-there is no manual Connect/Disconnect button in the admin panel.
+[Linux `/proc` documentation](https://www.kernel.org/doc/html/latest/filesystems/proc.html).

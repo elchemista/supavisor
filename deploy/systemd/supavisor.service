@@ -35,7 +35,7 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 StateDirectory=supavisor
 StateDirectoryMode=0700
 TasksMax=2048
-Environment=SERVICE_DATA_DIR=/var/lib/supavisor/services
+Environment=SUPAVISOR_DATA_DIR=/var/lib/supavisor/services
 Environment=ERL_CRASH_DUMP=/var/lib/supavisor/erl_crash.dump
 
 [Install]

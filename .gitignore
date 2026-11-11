@@ -49,14 +49,12 @@ priv/native/*
 priv/jit/postgres/certs/*.crt
 priv/jit/postgres/certs/*.key
 
-# Runtime model downloads and private mail keys
+# Private runtime files and downloads from older installations
 /var/
 /.fastembed_cache/
 
-# Local ONNX model weights, voices and tokenizers stay outside Git.
+# Keep any retired local model downloads out of Git.
 /priv/stt/*
-!/priv/stt/README.md
 /priv/tts/*
-!/priv/tts/README.md
 /priv/ai/*
-!/priv/ai/README.md
+/vendor/ex_fastembed/

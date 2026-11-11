@@ -8,7 +8,7 @@ defmodule SupavisorWeb.AdminProvisioning do
 
   def enabled? do
     config()
-    |> Keyword.get(:enabled, false)
+    |> Keyword.get(:enabled, true)
   end
 
   def available? do
@@ -27,8 +27,9 @@ defmodule SupavisorWeb.AdminProvisioning do
     config()
     |> Keyword.get(:allowed_targets, [])
     |> case do
+      [] -> metadata_target()
       targets when is_list(targets) -> targets
-      _ -> []
+      _ -> metadata_target()
     end
   end
 
@@ -190,15 +191,7 @@ defmodule SupavisorWeb.AdminProvisioning do
       username: Keyword.fetch!(provisioner, :username),
       password: Keyword.fetch!(provisioner, :password),
       database: Keyword.get(provisioner, :database, "postgres"),
-      ssl:
-        if(Keyword.get(provisioner, :ssl, false),
-          do:
-            Keyword.merge(
-              [verify: :verify_peer, cacerts: :public_key.cacerts_get()],
-              Keyword.get(provisioner, :ssl_opts, [])
-            ),
-          else: false
-        ),
+      ssl: connection_ssl(provisioner),
       connect_timeout: 5_000,
       timeout: 5_000,
       queue_target: 100,
@@ -327,8 +320,42 @@ defmodule SupavisorWeb.AdminProvisioning do
 
   defp provisioner_config do
     case Keyword.get(config(), :provisioner, []) do
+      [] -> metadata_provisioner()
       provisioner when is_list(provisioner) -> provisioner
+      _ -> metadata_provisioner()
+    end
+  end
+
+  defp metadata_target do
+    repo = Supavisor.Repo.config()
+
+    case repo[:hostname] do
+      host when is_binary(host) and host != "" -> [{host, repo[:port] || 5432}]
       _ -> []
+    end
+  end
+
+  defp metadata_provisioner do
+    Supavisor.Repo.config()
+    |> Keyword.take([:username, :password, :database, :ssl, :ssl_opts])
+  end
+
+  defp connection_ssl(provisioner) do
+    case Keyword.get(provisioner, :ssl, false) do
+      false ->
+        false
+
+      nil ->
+        false
+
+      options when is_list(options) ->
+        options
+
+      true ->
+        Keyword.merge(
+          [verify: :verify_peer, cacerts: :public_key.cacerts_get()],
+          Keyword.get(provisioner, :ssl_opts, [])
+        )
     end
   end
 end

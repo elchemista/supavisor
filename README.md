@@ -16,7 +16,7 @@ with `admin@localhost`. PostgreSQL keeps port `5432`; Supavisor uses `6543`
 (transaction pooling) and `5452` (session pooling).
 
 - [Local setup and Linux service deployment](docs/development/local-admin.md)
-- [REST/WebSocket services, local embeddings, mailboxes and webhooks](docs/development/workspace-services.md)
+- [Authenticated MCP database access](docs/development/mcp.md)
 - [Per-database export, ZIP backups and restore](docs/development/database-backups.md)
 
 [![Coverage Status](https://coveralls.io/repos/github/supabase/supavisor/badge.svg?branch=main)](https://coveralls.io/github/supabase/supavisor?branch=main)
@@ -49,17 +49,22 @@ full hosted control plane.
 
 The dashboard supports:
 
-- Local sign-in, administrator allowlists, magic links and GitHub OAuth.
-- Scoped REST/WebSocket API keys, live queues and connection monitoring.
-- Local embedding catalog, download and inference with ex_fastembed.
-- Postbeam mailboxes, inbox/outbox, DKIM records and authenticated incoming webhooks.
-- CPU/RAM and model request metrics held in bounded ETS storage.
+- Password sign-in, administrator allowlists and GitHub OAuth.
+- Authenticated MCP access for database clients, including OAuth authorization.
+- CPU/RAM monitoring held in bounded ETS storage.
 - Listing Supavisor tenant connection profiles.
 - Creating, editing, and deleting tenant metadata.
 - Managing stored Supavisor users or auth-query manager users.
 - Showing concrete connection examples, including Elixir/Ecto `url:` config.
 - Optional database provisioning that creates a new PostgreSQL database and
   login role, then creates the matching Supavisor tenant.
+
+Mail, local inference, speech and embedding services have been removed. Existing
+legacy service tables and data are preserved. In this local checkout, downloaded
+models and the retired audio library were moved out of `priv` to the ignored
+`var/retired-services` directory so source releases do not bundle them. Upgrades
+of other installations do not move or delete old downloads automatically; keep
+retired files outside `priv` when building a release.
 
 Database provisioning is deliberately conservative. It is disabled by default in
 global config, requires explicit provisioner credentials, and only allows target

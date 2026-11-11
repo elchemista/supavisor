@@ -45,13 +45,13 @@ config :supavisor, Supavisor.Repo,
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
 config :supavisor, SupavisorWeb.Endpoint,
+  url: [scheme: "http", host: "localhost", port: 4002],
   http: [ip: {127, 0, 0, 1}, port: 4002],
   server: false
 
 config :supavisor, SupavisorWeb.AdminAuth,
   admin_emails: ["admin@localhost", "admin@example.com"],
   base_url: "http://localhost:4002",
-  magic_link_ttl_seconds: 900,
   session_ttl_seconds: 28_800
 
 config :supavisor, SupavisorWeb.AdminProvisioning,
@@ -64,8 +64,6 @@ config :supavisor, SupavisorWeb.AdminProvisioning,
     ssl_opts: []
   ],
   allowed_targets: [{"localhost", 6432}, {"127.0.0.1", 6432}]
-
-config :supavisor, Supavisor.Mailer, adapter: Swoosh.Adapters.Test
 
 config :supavisor, Supavisor.Vault,
   ciphers: [
