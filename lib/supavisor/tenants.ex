@@ -222,6 +222,8 @@ defmodule Supavisor.Tenants do
     |> Repo.all()
   end
 
+  @spec get_pool_config_cache(String.t(), String.t(), non_neg_integer() | nil) ::
+          [Tenant.t()] | {:error, term()}
   def get_pool_config_cache(external_id, user, ttl \\ :timer.hours(24)) do
     ttl = if is_nil(ttl), do: :timer.hours(24), else: ttl
     cache_key = {:pool_config_cache, external_id, user}
@@ -231,6 +233,7 @@ defmodule Supavisor.Tenants do
          end) do
       {_, {:cached, value}} -> value
       {_, {:cached, value}, _} -> value
+      {:error, reason} -> {:error, reason}
     end
   end
 
